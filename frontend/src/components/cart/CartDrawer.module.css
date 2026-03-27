@@ -1,0 +1,115 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 200;
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: 380px;
+  max-width: 100vw;
+  background: var(--noon-white);
+  z-index: 201;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+  box-shadow: -4px 0 20px rgba(0,0,0,0.15);
+}
+
+.open {
+  transform: translateX(0);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--noon-border);
+  background: var(--noon-yellow);
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--noon-black);
+}
+
+.closeBtn {
+  background: var(--noon-black);
+  color: var(--noon-yellow);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s;
+}
+
+.closeBtn:hover { opacity: 0.8; }
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  color: var(--noon-text-light);
+}
+
+.shopBtn {
+  background: var(--noon-yellow);
+  color: var(--noon-black);
+  padding: 10px 24px;
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--noon-border);
+  background: var(--noon-gray);
+}
+
+.total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 16px;
+}
+
+.totalAmount {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--noon-black);
+}
+
+.checkoutBtn {
+  display: block;
+  text-align: center;
+  background: var(--noon-yellow);
+  color: var(--noon-black);
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  font-weight: 700;
+  transition: background 0.2s;
+  width: 100%;
+}
+
+.checkoutBtn:hover { background: var(--noon-yellow-dark); }

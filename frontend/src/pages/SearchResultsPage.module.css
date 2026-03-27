@@ -1,0 +1,123 @@
+.searchHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 0;
+  flex-wrap: wrap;
+}
+
+.searchTitle {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--noon-black);
+}
+
+.searchTitle em {
+  color: var(--noon-black);
+  font-style: normal;
+  font-weight: 800;
+}
+
+.count {
+  font-size: 14px;
+  color: var(--noon-text-light);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  padding-bottom: 40px;
+}
+
+@media (min-width: 768px) {
+  .layout { grid-template-columns: 240px 1fr; }
+}
+
+.sidebarDesktop {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .sidebarDesktop { display: block; }
+}
+
+.main {}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: var(--noon-white);
+  border-radius: var(--radius-md);
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-card);
+}
+
+.resultCount {
+  font-size: 13px;
+  color: var(--noon-text-light);
+}
+
+.sortWrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sortLabel {
+  font-size: 13px;
+  color: var(--noon-text-light);
+}
+
+.sortSelect {
+  padding: 6px 10px;
+  border: 1px solid var(--noon-border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  outline: none;
+}
+
+.sortSelect:focus { border-color: var(--noon-yellow); }
+
+.noQuery {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 300px;
+  color: var(--noon-text-light);
+  font-size: 16px;
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px 0;
+  flex-wrap: wrap;
+}
+
+.pageBtn {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--noon-border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--noon-white);
+  transition: all 0.2s;
+}
+
+.pageBtn:hover {
+  background: var(--noon-yellow);
+  border-color: var(--noon-yellow);
+}
+
+.pageBtnActive {
+  background: var(--noon-yellow);
+  border-color: var(--noon-yellow-dark);
+}

@@ -1,0 +1,17 @@
+{
+  "name": "noon-clone-backend",
+  "version": "1.0.0",
+  "description": "Noon-like e-commerce backend API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1"
+  }
+}

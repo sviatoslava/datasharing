@@ -1,0 +1,132 @@
+.wrapper {
+  position: relative;
+  overflow: hidden;
+  transition: background 0.5s ease;
+}
+
+.placeholder {
+  height: 300px;
+  background: var(--noon-yellow);
+}
+
+.content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 60px;
+  padding-bottom: 60px;
+  gap: 32px;
+  min-height: 280px;
+}
+
+.text {
+  flex: 1;
+  z-index: 1;
+}
+
+.tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 12px;
+  border-radius: 20px;
+  margin-bottom: 12px;
+  letter-spacing: 1px;
+}
+
+.title {
+  font-size: clamp(28px, 4vw, 52px);
+  font-weight: 900;
+  line-height: 1.1;
+  margin-bottom: 12px;
+}
+
+.subtitle {
+  font-size: clamp(14px, 2vw, 20px);
+  opacity: 0.85;
+  margin-bottom: 24px;
+}
+
+.cta {
+  display: inline-block;
+  padding: 14px 32px;
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  font-weight: 800;
+  transition: opacity 0.2s, transform 0.2s;
+  letter-spacing: 0.5px;
+}
+
+.cta:hover { opacity: 0.9; transform: translateY(-1px); }
+
+.illustration {
+  flex-shrink: 0;
+  width: 200px;
+  height: 200px;
+  position: relative;
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .illustration { display: block; }
+}
+
+.shapeCircle {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+
+.bigText {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 120px;
+  font-weight: 900;
+  font-style: italic;
+}
+
+.navBtn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0,0,0,0.25);
+  color: white;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  z-index: 2;
+}
+
+.navBtn:hover { background: rgba(0,0,0,0.45); }
+.navLeft { left: 16px; }
+.navRight { right: 16px; }
+
+.dots {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  z-index: 2;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.5);
+  transition: background 0.2s, transform 0.2s;
+}
+
+.dotActive {
+  background: white;
+  transform: scale(1.3);
+}

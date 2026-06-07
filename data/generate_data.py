@@ -169,6 +169,34 @@ def _generate_customers(n: int, date_start: datetime, date_end: datetime, rng: n
     })
 
 
+def _apply_quiet_periods(txn_days: list, total_days: int, rng: np.random.Generator) -> list:
+    """Randomly remove transactions from 1–2 quiet stretches (holiday, illness, travel)."""
+    n_quiet = rng.integers(0, 3)
+    for _ in range(n_quiet):
+        quiet_start = rng.integers(0, max(1, total_days - 20))
+        quiet_len = rng.integers(10, 40)
+        txn_days = [d for d in txn_days if not (quiet_start <= d < quiet_start + quiet_len)]
+    return txn_days
+
+
+def _apply_burst_period(txn_days: list, total_days: int, rng: np.random.Generator) -> list:
+    """Add a short spending spike (holiday shopping, trip, etc.)."""
+    if total_days < 14:
+        return txn_days
+    burst_start = rng.integers(0, max(1, total_days - 14))
+    n_extra = rng.integers(2, 6)
+    extra = rng.integers(burst_start, min(total_days, burst_start + 14), size=n_extra).tolist()
+    return sorted(txn_days + extra)
+
+
+def _drop_fraction(txn_days: list, drop_rate: float, rng: np.random.Generator) -> list:
+    """Randomly drop a fraction of transactions to add per-event noise."""
+    if not txn_days:
+        return txn_days
+    mask = rng.random(len(txn_days)) > drop_rate
+    return [d for d, keep in zip(txn_days, mask) if keep]
+
+
 def _generate_transactions_for_customer(
     customer: pd.Series,
     date_end: datetime,
@@ -194,55 +222,117 @@ def _generate_transactions_for_customer(
     else:
         channel_probs = [0.30, 0.15, 0.45, 0.10]
 
-    if archetype == "never_activated":
-        n_txns_total = rng.integers(0, 2)
-        txn_days = sorted(rng.integers(1, min(30, (date_end - issue_date).days + 1), size=n_txns_total).tolist()) if n_txns_total > 0 else []
+    # Per-customer channel noise: shift probs slightly so no two customers are identical
+    channel_noise = rng.dirichlet(np.array(channel_probs) * 8)
+    channel_probs = channel_noise.tolist()
+
+    total_days = max(1, (date_end - issue_date).days)
+
+    # ── Archetype blending (15% chance): borrow behavior from a neighbor archetype
+    effective_archetype = archetype
+    if rng.random() < 0.15:
+        blend_map = {
+            "never_activated": "slow_activator",
+            "slow_activator": "never_activated",
+            "healthy_active": "declining_active",
+            "declining_active": "healthy_active",
+            "high_value": "healthy_active",
+            "churned": "declining_active",
+        }
+        effective_archetype = blend_map.get(archetype, archetype)
+
+    if effective_archetype == "never_activated":
+        # Wider range: 0–4 transactions so borderline cases exist near threshold
+        n_txns_total = rng.integers(0, 5)
+        if n_txns_total > 0 and total_days > 1:
+            txn_days = sorted(rng.integers(0, total_days, size=n_txns_total).tolist())
+        else:
+            txn_days = []
         monthly_rate = 0
 
-    elif archetype == "slow_activator":
-        n_txns_first_45 = rng.integers(0, 2)
-        n_txns_after = rng.integers(3, 8)
-        days_avail = (date_end - issue_date).days
+    elif effective_archetype == "slow_activator":
+        # 0–3 in first 45 days, 2–10 after — overlap with never_activated at low end
+        days_avail = total_days
         first_phase = min(45, days_avail)
-        second_phase = min(days_avail, 90) - first_phase
-        early = sorted(rng.integers(1, max(2, first_phase), size=n_txns_first_45).tolist()) if n_txns_first_45 > 0 else []
-        late = sorted(rng.integers(first_phase + 1, max(first_phase + 2, first_phase + second_phase), size=n_txns_after).tolist()) if second_phase > 1 else []
+        second_phase = max(0, min(days_avail, 90) - first_phase)
+        n_early = rng.integers(0, 4)
+        n_late = rng.integers(2, 11)
+        early = sorted(rng.integers(0, max(1, first_phase), size=n_early).tolist()) if n_early > 0 else []
+        if second_phase > 1:
+            late = sorted(rng.integers(first_phase, max(first_phase + 1, first_phase + second_phase), size=n_late).tolist())
+        else:
+            late = []
         txn_days = early + late
-        monthly_rate = rng.integers(4, 9)
+        monthly_rate = rng.integers(3, 10)
+        # 20% of slow activators never fully ramp — look like never_activated beyond 90d
+        if rng.random() < 0.20:
+            txn_days = [d for d in txn_days if d < 90]
 
-    elif archetype == "healthy_active":
-        monthly_rate = rng.integers(8, 16)
-        total_days = (date_end - issue_date).days
+    elif effective_archetype == "healthy_active":
+        # Wider monthly rate range + random startup delay (some healthy users start slowly)
+        monthly_rate = int(np.clip(rng.normal(10, 4), 3, 22))
+        startup_delay = int(rng.exponential(5))  # some customers take days to start
         n_txns_total = max(0, int(monthly_rate * total_days / 30))
-        txn_days = sorted(rng.integers(0, max(1, total_days), size=n_txns_total).tolist())
+        if n_txns_total > 0 and total_days > 1:
+            txn_days = sorted((rng.integers(startup_delay, max(startup_delay + 1, total_days), size=n_txns_total)).tolist())
+        else:
+            txn_days = []
+        # 15% chance of a 30–60 day hibernation mid-history (vacation, card stolen/replaced)
+        if rng.random() < 0.15 and total_days > 120:
+            gap_start = rng.integers(30, max(31, total_days - 90))
+            gap_len = rng.integers(30, 61)
+            txn_days = [d for d in txn_days if not (gap_start <= d < gap_start + gap_len)]
+            # Resume after gap at original rate
+            resume_n = max(0, int(monthly_rate * (total_days - gap_start - gap_len) / 30))
+            if resume_n > 0 and gap_start + gap_len < total_days:
+                extra = rng.integers(gap_start + gap_len, total_days, size=resume_n).tolist()
+                txn_days = sorted(txn_days + extra)
 
-    elif archetype == "declining_active":
-        monthly_rate = rng.integers(8, 12)
-        total_days = (date_end - issue_date).days
+    elif effective_archetype == "declining_active":
+        # Gaussian noise on decay rate; 30% of decliners actually stabilize
+        monthly_rate = int(np.clip(rng.normal(9, 3), 3, 18))
         txn_days = []
         day = 0
+        decay_rate = rng.uniform(0.01, 0.04)  # randomize decay speed
+        stabilizes = rng.random() < 0.30
+        stable_floor = rng.integers(2, 6) if stabilizes else 0
         current_rate = monthly_rate
         while day < total_days:
-            current_rate = max(0.5, current_rate * (1 - 0.02))  # ~2% decay per month step
+            current_rate = max(stable_floor, current_rate * (1 - decay_rate))
             gap = max(1, int(30 / max(0.1, current_rate) * rng.exponential(1)))
             day += gap
             if day < total_days:
                 txn_days.append(day)
 
-    elif archetype == "high_value":
-        monthly_rate = rng.integers(20, 41)
-        total_days = (date_end - issue_date).days
+    elif effective_archetype == "high_value":
+        monthly_rate = int(np.clip(rng.normal(28, 8), 12, 50))
         n_txns_total = max(0, int(monthly_rate * total_days / 30))
         txn_days = sorted(rng.integers(0, max(1, total_days), size=n_txns_total).tolist())
 
     else:  # churned
         active_days = rng.integers(60, 300)
-        active_days = min(active_days, (date_end - issue_date).days - 60)
+        active_days = min(active_days, total_days - 30)
         if active_days <= 0:
             return txns
-        monthly_rate = rng.integers(5, 12)
+        monthly_rate = int(np.clip(rng.normal(7, 3), 2, 15))
         n_txns_total = max(0, int(monthly_rate * active_days / 30))
         txn_days = sorted(rng.integers(0, max(1, active_days), size=n_txns_total).tolist())
+        # 20% of churned customers make 1–3 zombie transactions after their active period
+        if rng.random() < 0.20 and active_days < total_days - 10:
+            zombie_n = rng.integers(1, 4)
+            zombie_days = rng.integers(active_days, total_days, size=zombie_n).tolist()
+            txn_days = sorted(txn_days + zombie_days)
+
+    # ── Behavioral noise layer (applied to all archetypes) ────────────────
+    # 1. Random quiet periods (skip transactions during a stretch)
+    if total_days > 60 and rng.random() < 0.40:
+        txn_days = _apply_quiet_periods(txn_days, total_days, rng)
+    # 2. Random spending burst (holiday, trip, one-off)
+    if rng.random() < 0.25:
+        txn_days = _apply_burst_period(txn_days, total_days, rng)
+    # 3. Per-transaction random drop (card left at home, declined, forgotten)
+    drop_rate = rng.uniform(0.05, 0.20)
+    txn_days = _drop_fraction(txn_days, drop_rate, rng)
 
     for day_offset in txn_days:
         txn_date = issue_date + timedelta(days=int(day_offset))

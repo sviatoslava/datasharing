@@ -91,6 +91,7 @@ def main(run_date, mode, skip_data_gen, config_path, output_dir):
     # ── Step 2: Load & validate data ──────────────────────────────
     print("\n[2/9] Loading and validating data...")
     customers_df, txn_df = load_data(config, output_dir)
+    txn_raw = txn_df.copy()  # keep full dataset including post-run_date transactions
     txn_clean, quality_report = validate_transactions(txn_df, customers_df, config, run_date=run_date_dt)
     print(f"  Data quality: {quality_report['clean_count']:,} qualifying transactions "
           f"({quality_report['retention_rate_pct']}% retained)")
@@ -119,7 +120,8 @@ def main(run_date, mode, skip_data_gen, config_path, output_dir):
     print(f"  Activation features: {len(activation_features):,} customers × {len(activation_features.columns)} features")
 
     retention_features = compute_retention_features(
-        txn_clean, customers_df, run_date_dt, config, activation_customer_ids
+        txn_clean, customers_df, run_date_dt, config, activation_customer_ids,
+        future_txn_df=txn_raw,  # pass full txns for prospective label
     )
     print(f"  Retention features: {len(retention_features):,} customers × {len(retention_features.columns)} features")
     save_features(activation_features, retention_features, output_dir, date_str)

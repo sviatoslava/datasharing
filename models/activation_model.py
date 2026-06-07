@@ -18,6 +18,8 @@ EXCLUDE_FROM_MODEL = {
     "customer_id", "customer_segment", "card_issue_date",
     "preferred_channel", "dominant_mcc_group",
     "is_activated",
+    "total_transactions_60d",  # label proxy — excluded to prevent leakage
+    "total_spend_60d",          # label proxy — excluded to prevent leakage
 }
 
 

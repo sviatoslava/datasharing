@@ -17,8 +17,8 @@ from features.base_features import (
 
 ACTIVATION_FEATURE_COLS = [
     "days_since_card_issue",
-    "total_transactions_30d", "total_transactions_60d",
-    "total_spend_30d", "total_spend_60d",
+    "total_transactions_30d",
+    "total_spend_30d",
     "first_transaction_day",
     "channel_diversity",
     "mcc_diversity",
@@ -106,14 +106,15 @@ def compute_activation_features(
     # Transaction rate acceleration: second half of 30d vs first half
     txn_accel = _compute_txn_acceleration(cohort_txns, issue_dates, ref_dates)
 
-    # MCC group features (post-issue, 60d window)
+    # MCC group features (post-issue, 30d window — stays within feature window)
     mcc_ref_dates = pd.Series(
-        {cid: issue_dates[cid] + timedelta(days=60) for cid in cohort.index},
+        {cid: issue_dates[cid] + timedelta(days=30) for cid in cohort.index},
         name="ref_date",
     )
+    mcc_ref_dates.index.name = "customer_id"
     # Clip to run_date
     mcc_ref_dates = mcc_ref_dates.apply(lambda d: min(d, run_date))
-    mcc_group_feats = compute_mcc_group_features(cohort_txns, mcc_ref_dates, 60, mcc_group_map)
+    mcc_group_feats = compute_mcc_group_features(cohort_txns, mcc_ref_dates, 30, mcc_group_map)
 
     # Routing metadata (not model features)
     preferred_ch = _compute_preferred_channel_from_issue(cohort_txns, issue_dates, ref_dates)
@@ -142,9 +143,15 @@ def compute_activation_features(
 
     features = pd.concat([features, mcc_group_feats], axis=1)
 
-    # Target label: is_activated (only label customers past day 60, right-censoring guard)
+    # Prospective label: >= 2 transactions in (card_issue+30d, card_issue+60d]
+    # Features were computed over days 0-30, so NO overlap with label window
+    prospective_txn_count = _compute_from_issue_window(
+        cohort_txns, issue_dates, 30, 60, "prospective_txns_30_60", "count"
+    )
+    # Right-censor: only label cards that have been issued >= 60 days ago
+    # (we need both the 30d feature window AND the 30-60d label window to have elapsed)
     past_60 = days_since_issue >= 60
-    activated = (txn_60 >= acfg["min_transaction_count"]) & (spend_60 >= acfg["min_spend_threshold"])
+    activated = prospective_txn_count >= 2
     features["is_activated"] = np.where(past_60, activated.astype(int), np.nan)
 
     return features.reset_index().rename(columns={"index": "customer_id", "customer_id": "customer_id"})
@@ -157,6 +164,26 @@ def _compute_from_issue(txn_df, issue_dates, window_days, col_name, agg):
         mask = (
             (txn_df["customer_id"] == cid) &
             (txn_df["transaction_date"] >= issue_date) &
+            (txn_df["transaction_date"] <= end) &
+            (txn_df["transaction_type"] != "refund")
+        )
+        sub = txn_df[mask]
+        if agg == "count":
+            result[cid] = len(sub)
+        else:
+            result[cid] = sub["net_amount"].clip(lower=0).sum()
+    return pd.Series(result, name=col_name)
+
+
+def _compute_from_issue_window(txn_df, issue_dates, start_day, end_day, col_name, agg):
+    """Compute aggregation over (issue_date+start_day, issue_date+end_day] — exclusive start, inclusive end."""
+    result = {}
+    for cid, issue_date in issue_dates.items():
+        start = issue_date + timedelta(days=start_day)
+        end = issue_date + timedelta(days=end_day)
+        mask = (
+            (txn_df["customer_id"] == cid) &
+            (txn_df["transaction_date"] > start) &
             (txn_df["transaction_date"] <= end) &
             (txn_df["transaction_type"] != "refund")
         )

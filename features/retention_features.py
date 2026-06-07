@@ -31,6 +31,7 @@ def compute_retention_features(
     run_date: datetime,
     config: dict,
     activation_customer_ids: set = None,
+    future_txn_df: pd.DataFrame = None,  # NEW: full txns including post-run_date, for prospective label
 ) -> pd.DataFrame:
     """Compute all retention features for the ever-active cohort."""
     rcfg = config["retention"]
@@ -135,14 +136,34 @@ def compute_retention_features(
     features["customer_segment"] = eligible_customers["customer_segment"]
     features["lifetime_txn_count"] = lifetime_counts.reindex(eligible_customers.index, fill_value=0)
 
-    # Target: is_churned (90d no qualifying txn, had >= min_prior_active_months active)
+    # Prospective label: will the customer be inactive in (run_date, run_date + 30d]?
+    # This requires future_txn_df which contains transactions after run_date.
     min_active_months = rcfg["min_prior_active_months"]
     churn_days = rcfg["churn_label_days"]
-    churned = (
-        (days_since >= churn_days) &
-        (features["monthly_active_months"] >= min_active_months) &
-        (~features["is_seasonal_customer"].astype(bool))
-    )
+    if future_txn_df is not None and len(future_txn_df) > 0:
+        forward_end = run_date + timedelta(days=30)
+        future_active = set(
+            future_txn_df[
+                (future_txn_df["transaction_date"] > run_date) &
+                (future_txn_df["transaction_date"] <= forward_end) &
+                (future_txn_df["transaction_type"] != "refund") &
+                (future_txn_df["transaction_amount"] >= config["activation"].get("min_transaction_amount", 1.0)) &
+                (future_txn_df["customer_id"].isin(eligible_customers.index))
+            ]["customer_id"].unique()
+        )
+        churned = (
+            (~pd.Index(eligible_customers.index).isin(future_active)) &
+            (features["monthly_active_months"] >= min_active_months) &
+            (~features["is_seasonal_customer"].astype(bool))
+        )
+    else:
+        # Fallback if no future data: use current days_since_last_txn >= churn_days
+        # but this is leaky — should not occur in production
+        churned = (
+            (days_since >= churn_days) &
+            (features["monthly_active_months"] >= min_active_months) &
+            (~features["is_seasonal_customer"].astype(bool))
+        )
     features["is_churned"] = churned.astype(int)
 
     return features.reset_index().rename(columns={"index": "customer_id"})

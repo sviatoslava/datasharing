@@ -26,6 +26,12 @@ from pipeline.crm_export import export_crm_files
 from pipeline.feedback_ingestion import run_feedback_ingestion
 from evaluation.metrics import compute_model_metrics, compute_activation_rate, compute_retention_rate
 from evaluation.campaign_evaluator import run_evaluation
+from reporting.step_outputs import (
+    save_data_quality_report, save_cohort_summary, save_features,
+    save_scores_and_shap, save_fairness_report,
+)
+from reporting.business_report import generate_business_report
+from reporting.backtesting import run_backtesting
 
 
 def load_config(config_path: str) -> dict:
@@ -90,6 +96,7 @@ def main(run_date, mode, skip_data_gen, config_path, output_dir):
           f"({quality_report['retention_rate_pct']}% retained)")
     print(f"  Duplicates removed: {quality_report['n_duplicates_removed']}, "
           f"Refunds: {quality_report['n_refunds']}")
+    save_data_quality_report(quality_report, output_dir, date_str)
 
     # ── Step 3: Cohort determination ──────────────────────────────
     print("\n[3/9] Determining cohorts...")
@@ -102,6 +109,7 @@ def main(run_date, mode, skip_data_gen, config_path, output_dir):
         ]["customer_id"]
     )
     print(f"  Activation cohort: {len(activation_customer_ids):,} customers (cards issued last {window}d)")
+    save_cohort_summary(activation_customer_ids, customers_df, run_date_dt, config, output_dir, date_str)
 
     # ── Step 4: Feature engineering ───────────────────────────────
     print("\n[4/9] Computing features...")
@@ -114,6 +122,7 @@ def main(run_date, mode, skip_data_gen, config_path, output_dir):
         txn_clean, customers_df, run_date_dt, config, activation_customer_ids
     )
     print(f"  Retention features: {len(retention_features):,} customers × {len(retention_features.columns)} features")
+    save_features(activation_features, retention_features, output_dir, date_str)
 
     # ── Step 5: Train or load models ──────────────────────────────
     print("\n[5/9] Training/loading models...")
@@ -157,6 +166,18 @@ def main(run_date, mode, skip_data_gen, config_path, output_dir):
             model_metrics["retention"] = ret_metrics
         else:
             print(f"  WARNING: Only {len(labeled_ret)} labeled retention samples. Need >= 50.")
+
+    # ── Step 5b: Backtesting ──────────────────────────────────────
+    backtest_report = run_backtesting(txn_clean, customers_df, act_model, config, run_date_dt)
+    if backtest_report.get("cohorts"):
+        n_stable = "STABLE" if backtest_report.get("model_stable") else "UNSTABLE"
+        avg_auc = backtest_report.get("avg_auc")
+        auc_str = f"{avg_auc:.3f}" if avg_auc is not None else "N/A"
+        print(f"  Backtesting: {len(backtest_report['cohorts'])} cohorts | avg AUC={auc_str} | {n_stable}")
+    backtest_path = os.path.join(output_dir, f"step5_backtesting_{date_str}.json")
+    with open(backtest_path, "w") as f:
+        import json as _json
+        _json.dump(backtest_report, f, indent=2, default=str)
 
     # ── Step 6: Score + SHAP ──────────────────────────────────────
     print("\n[6/9] Scoring and explaining...")
@@ -202,7 +223,11 @@ def main(run_date, mode, skip_data_gen, config_path, output_dir):
         ret_scores_df = pd.DataFrame()
         ret_shap_df = pd.DataFrame()
 
+    # Save scores and SHAP
+    save_scores_and_shap(act_scores_df, ret_scores_df, act_shap_df, ret_shap_df, output_dir, date_str)
+
     # ── Step 6b: Model stability monitoring ───────────────────────
+    stability_report = {}
     if act_model.model is not None and act_model.training_feature_stats:
         act_feat_for_psi = activation_features_idx[act_model.feature_cols] if act_model.feature_cols else pd.DataFrame()
         if len(act_feat_for_psi) > 0:
@@ -231,6 +256,7 @@ def main(run_date, mode, skip_data_gen, config_path, output_dir):
         act_scores_df.assign(model_type="activation") if len(act_scores_df) > 0 else pd.DataFrame(),
         ret_scores_df.assign(model_type="retention") if len(ret_scores_df) > 0 else pd.DataFrame(),
     ], ignore_index=True)
+    fairness_report = {}
     if len(all_scores) > 0 and "customer_segment" in all_scores.columns and len(act_actions) > 0:
         merged_for_fairness = all_scores.merge(
             pd.concat([act_actions[["customer_id", "risk_band"]], ret_actions[["customer_id", "risk_band"]]], ignore_index=True),
@@ -238,6 +264,7 @@ def main(run_date, mode, skip_data_gen, config_path, output_dir):
         )
         fairness_report = compute_disparity_report(merged_for_fairness.dropna(subset=["risk_band"]))
         print(f"  Fairness check: {fairness_report.get('status', 'unknown')}")
+    save_fairness_report(fairness_report, output_dir, date_str)
 
     # ── Step 8: Evaluation ────────────────────────────────────────
     print("\n[8/9] Running evaluation...")
@@ -277,6 +304,10 @@ def main(run_date, mode, skip_data_gen, config_path, output_dir):
         run_date=date_str,
         output_dir=output_dir,
     )
+
+    # ── Business report ───────────────────────────────────────────
+    report_path = generate_business_report(output_dir, date_str)
+    print(f"\n  Business report: {report_path}")
 
     # Summary
     print(f"\n{'='*60}")

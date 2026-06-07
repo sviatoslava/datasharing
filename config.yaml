@@ -188,15 +188,15 @@ actions:
     urgency_bonus_value: 0.30
 
   offer_action_templates:
-    grocery: "spend_${threshold}_at_{merchant}_in_{window}d_earn_{reward}"
-    restaurant: "dine_{n_times}x_at_restaurants_in_{window}d_earn_{reward}"
-    travel: "book_travel_earn_{multiplier}x_points_in_{window}d"
-    fuel: "fill_up_{n_times}x_save_${savings}_per_gallon_in_{window}d"
-    subscription: "set_up_{merchant}_autopay_get_${credit}_credit"
-    utility: "pay_utility_bill_once_earn_{points}_bonus_points"
-    retail: "shop_{merchant}_spend_${threshold}_get_${reward}_back_in_{window}d"
-    entertainment: "enjoy_{merchant}_use_card_{n_times}x_earn_{reward}"
-    general: "make_your_first_purchase_anywhere_earn_{cashback}pct_cashback"
+    grocery: "use_your_card_for_grocery_shopping_in_{window}d"
+    restaurant: "use_your_card_at_restaurants_{n_times}x_in_{window}d"
+    travel: "use_your_card_for_travel_purchases_in_{window}d"
+    fuel: "use_your_card_at_fuel_stations_{n_times}x_in_{window}d"
+    subscription: "set_up_a_subscription_or_autopay_with_your_card"
+    utility: "use_your_card_to_pay_a_utility_bill"
+    retail: "use_your_card_for_retail_shopping_in_{window}d"
+    entertainment: "use_your_card_for_entertainment_in_{window}d"
+    general: "make_your_first_purchase_with_your_card"
 
   spend_threshold_by_segment:
     premium: 200

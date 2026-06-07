@@ -196,36 +196,39 @@ def _avg_amount(txn_df, customer_ids, ref_date, window_days):
 
 
 def _monthly_active_months(txn_df, customer_ids, ref_date, n_months):
-    result = {}
-    for cid in customer_ids:
-        sub = txn_df[
-            (txn_df["customer_id"] == cid) &
-            (txn_df["transaction_date"] > ref_date - timedelta(days=n_months * 30)) &
-            (txn_df["transaction_date"] <= ref_date) &
-            (txn_df["transaction_type"] != "refund")
-        ]
-        if len(sub) == 0:
-            result[cid] = 0
-        else:
-            result[cid] = sub["transaction_date"].dt.to_period("M").nunique()
-    return pd.Series(result, name="monthly_active_months")
+    cutoff = ref_date - timedelta(days=n_months * 30)
+    sub = txn_df[
+        (txn_df["transaction_date"] > cutoff) &
+        (txn_df["transaction_date"] <= ref_date) &
+        (txn_df["transaction_type"] != "refund") &
+        (txn_df["customer_id"].isin(customer_ids))
+    ].copy()
+    if len(sub) == 0:
+        return pd.Series(0, index=customer_ids, name="monthly_active_months")
+    sub["period"] = sub["transaction_date"].dt.to_period("M")
+    result = sub.groupby("customer_id")["period"].nunique()
+    return result.reindex(customer_ids, fill_value=0).rename("monthly_active_months")
 
 
 def _is_seasonal(txn_df, customer_ids, ref_date):
-    result = {}
-    for cid in customer_ids:
-        sub = txn_df[
-            (txn_df["customer_id"] == cid) &
-            (txn_df["transaction_date"] > ref_date - timedelta(days=365)) &
-            (txn_df["transaction_date"] <= ref_date) &
-            (txn_df["transaction_type"] != "refund")
-        ]
-        if len(sub) < 3:
-            result[cid] = False
-        else:
-            monthly = sub.groupby(sub["transaction_date"].dt.to_period("M"))["transaction_id"].count()
-            result[cid] = bool(monthly.std() > monthly.mean() * 0.8 and monthly.sum() < 6)
-    return pd.Series(result, name="is_seasonal_customer")
+    sub = txn_df[
+        (txn_df["transaction_date"] > ref_date - timedelta(days=365)) &
+        (txn_df["transaction_date"] <= ref_date) &
+        (txn_df["transaction_type"] != "refund") &
+        (txn_df["customer_id"].isin(customer_ids))
+    ].copy()
+    if len(sub) == 0:
+        return pd.Series(False, index=customer_ids, name="is_seasonal_customer")
+    sub["period"] = sub["transaction_date"].dt.to_period("M")
+    monthly_counts = sub.groupby(["customer_id", "period"])["transaction_id"].count()
+    stats = monthly_counts.groupby("customer_id").agg(["std", "mean", "sum", "count"])
+    stats["std"] = stats["std"].fillna(0)
+    is_seasonal = (
+        (stats["std"] > stats["mean"] * 0.8) &
+        (stats["sum"] < 6) &
+        (stats["count"] >= 3)
+    )
+    return is_seasonal.reindex(customer_ids, fill_value=False).rename("is_seasonal_customer")
 
 
 def _diversity(txn_df, customer_ids, ref_date, window_days, col):

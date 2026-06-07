@@ -327,19 +327,19 @@ class TestOfferGenerator:
     def test_generates_specific_action(self, small_transactions, config):
         from actions.offer_generator import _render_offer_action
         action = _render_offer_action(
-            "grocery", "standard", "high_risk", "Kroger", 60, "cashback", 0.07,
+            "grocery", "high_risk", 60,
             config["actions"]["offer_action_templates"],
         )
         assert isinstance(action, str)
         assert len(action) > 0
-        assert "Kroger" in action or "cashback" in action.lower() or "spend" in action.lower()
+        assert "grocery" in action.lower() or "card" in action.lower()
 
     def test_all_categories_render(self, config):
         from actions.offer_generator import _render_offer_action
         templates = config["actions"]["offer_action_templates"]
         for category in templates:
             action = _render_offer_action(
-                category, "standard", "medium_risk", "TestMerchant", 30, "cashback", 0.05,
+                category, "medium_risk", 30,
                 templates,
             )
             assert isinstance(action, str)

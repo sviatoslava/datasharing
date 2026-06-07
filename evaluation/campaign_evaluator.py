@@ -10,6 +10,19 @@ from evaluation.metrics import compute_model_metrics, compute_expected_lift
 from evaluation.power_analysis import check_sufficient_power
 
 
+class _NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            return float(obj)
+        if isinstance(obj, (np.bool_,)):
+            return bool(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super().default(obj)
+
+
 def _wilson_ci(p: float, n: int, z: float = 1.96) -> tuple:
     """Wilson score confidence interval for a proportion."""
     if n == 0:
@@ -244,6 +257,6 @@ def run_evaluation(
     os.makedirs(output_dir, exist_ok=True)
     path = os.path.join(output_dir, f"validation_report_{run_date}.json")
     with open(path, "w") as f:
-        json.dump(report, f, indent=2)
+        json.dump(report, f, indent=2, cls=_NumpyEncoder)
     print(f"Validation report saved to {path}")
     return report

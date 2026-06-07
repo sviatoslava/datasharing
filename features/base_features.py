@@ -16,12 +16,12 @@ def build_mcc_group_map(mcc_groups_config: dict) -> dict:
 
 
 def _window_mask(txn_df: pd.DataFrame, ref_dates: pd.Series, window_days: int) -> pd.DataFrame:
-    """Returns a boolean mask: transactions within [ref_date - window_days, ref_date] per customer."""
-    merged = txn_df.merge(
-        ref_dates.rename("ref_date").reset_index(),
-        on="customer_id",
-        how="inner",
-    )
+    """Returns transactions within [ref_date - window_days, ref_date] per customer."""
+    ref_reset = ref_dates.rename("ref_date").reset_index()
+    # Ensure the index column is always named "customer_id" regardless of Series construction
+    if ref_reset.columns[0] != "customer_id":
+        ref_reset = ref_reset.rename(columns={ref_reset.columns[0]: "customer_id"})
+    merged = txn_df.merge(ref_reset, on="customer_id", how="inner")
     cutoff = merged["ref_date"] - pd.to_timedelta(window_days, unit="D")
     mask = (merged["transaction_date"] >= cutoff) & (merged["transaction_date"] <= merged["ref_date"])
     return merged[mask]
@@ -45,13 +45,9 @@ def compute_rolling_spend(
 
 def compute_days_since_last_txn(txn_df: pd.DataFrame, ref_dates: pd.Series) -> pd.Series:
     last_txn = txn_df.groupby("customer_id")["transaction_date"].max()
-    result = {}
-    for cid, ref_date in ref_dates.items():
-        if cid in last_txn.index:
-            result[cid] = (ref_date - last_txn[cid]).days
-        else:
-            result[cid] = 999
-    return pd.Series(result, name="days_since_last_txn")
+    ref_series = ref_dates if hasattr(ref_dates, "sub") else pd.Series(ref_dates)
+    days = (ref_series - last_txn.reindex(ref_series.index)).dt.days
+    return days.fillna(999).rename("days_since_last_txn")
 
 
 def compute_channel_diversity(

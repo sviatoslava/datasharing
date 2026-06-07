@@ -142,6 +142,12 @@ def main(run_date, mode, skip_data_gen, config_path, output_dir):
             print(f"  Loading existing models: {act_path}")
             act_model.load(act_path)
             ret_model.load(ret_path)
+            if act_model.training_metrics:
+                model_metrics["activation"] = act_model.training_metrics
+                print(f"  Activation model AUC-ROC: {act_model.training_metrics.get('auc_roc', 0):.3f} (from registry)")
+            if ret_model.training_metrics:
+                model_metrics["retention"] = ret_model.training_metrics
+                print(f"  Retention model AUC-ROC: {ret_model.training_metrics.get('auc_roc', 0):.3f} (from registry)")
         else:
             print("  No existing models found, training from scratch...")
             mode = "full"

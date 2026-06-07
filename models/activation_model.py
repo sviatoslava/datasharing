@@ -37,6 +37,7 @@ class ActivationModel:
         self.feature_cols = []
         self.explainer = None
         self.training_feature_stats = {}
+        self.training_metrics = {}
 
     def train(self, features_df: pd.DataFrame) -> dict:
         labeled = features_df[features_df["is_activated"].notna()].copy()
@@ -85,6 +86,7 @@ class ActivationModel:
             "activation_rate_val": float(y_val.mean()),
         }
         self.explainer = shap.TreeExplainer(self.model)
+        self.training_metrics = metrics
         return metrics
 
     def predict_proba(self, features_df: pd.DataFrame) -> pd.Series:
@@ -132,6 +134,7 @@ class ActivationModel:
             "version": version,
             "feature_cols": self.feature_cols,
             "training_feature_stats": self.training_feature_stats,
+            "training_metrics": self.training_metrics,
             "config": self.config,
         }
         with open(meta_path, "w") as f:
@@ -145,4 +148,5 @@ class ActivationModel:
             meta = json.load(f)
         self.feature_cols = meta["feature_cols"]
         self.training_feature_stats = meta.get("training_feature_stats", {})
+        self.training_metrics = meta.get("training_metrics", {})
         self.explainer = shap.TreeExplainer(self.model)

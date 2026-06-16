@@ -1,0 +1,237 @@
+data:
+  n_customers: 50000
+  date_start: "2023-01-01"
+  date_end: "2024-12-31"
+  random_seed: 42
+  raw_dir: "data/raw"
+
+activation:
+  min_spend_threshold: 100
+  min_transaction_count: 3
+  min_transaction_amount: 1.00
+  exclude_transaction_types: ["refund", "reversal", "balance_transfer", "internal"]
+  activation_window_days: 90
+  new_card_window_days: 90
+  scoring_mode: "event_triggered"
+
+retention:
+  inactive_threshold_days: 60
+  dormant_threshold_days: 180
+  churn_label_days: 90
+  min_prior_active_months: 2
+  rolling_windows_days: [30, 60, 90]
+  velocity_baseline_days: 30
+
+mcc_groups:
+  grocery: [5411, 5412, 5422, 5441, 5451]
+  restaurant: [5812, 5814, 5411, 5813]
+  travel: [4511, 4111, 4112, 4121, 3000, 3001, 3002, 3003, 3500, 3501, 4411]
+  fuel: [5541, 5542, 5172, 5983]
+  subscription: [4899, 5968, 7372, 5045, 4813]
+  utility: [4900, 4911, 4924, 4941, 4952]
+  retail: [5600, 5621, 5631, 5641, 5651, 5661, 5311, 5331, 5300, 5399]
+  entertainment: [7832, 7922, 7996, 7993, 7999, 7941]
+
+models:
+  activation:
+    algorithm: "xgboost"
+    n_estimators: 400
+    max_depth: 5
+    learning_rate: 0.05
+    probability_threshold: 0.35
+    class_weight_ratio: 3
+    shap_top_n: 3
+  retention:
+    algorithm: "lightgbm"
+    n_estimators: 500
+    max_depth: 6
+    learning_rate: 0.03
+    probability_threshold: 0.40
+    class_weight_ratio: 5
+    shap_top_n: 3
+
+actions:
+  activation:
+    high_risk:
+      - type: "first_use_cashback_offer"
+        channel_digital: "push_notification"
+        channel_nondigital: "sms"
+        offer_type: "cashback"
+        offer_value_premium: 0.10
+        offer_value_standard: 0.07
+        offer_value_student: 10
+        offer_duration_days: 60
+        frequency_touches: 3
+        frequency_window_days: 7
+        send_days: [1, 4, 10]
+      - type: "recurring_txn_tutorial"
+        channel: "email"
+        template: "autopay_bonus"
+        send_days: [3]
+    medium_risk:
+      - type: "mcc_targeted_offer"
+        channel_digital: "push_notification"
+        channel_nondigital: "email"
+        offer_type: "points_multiplier"
+        offer_value_premium: 3
+        offer_value_standard: 2
+        offer_value_student: 500
+        offer_duration_days: 30
+        frequency_touches: 2
+        frequency_window_days: 14
+        send_days: [1, 8]
+    low_risk:
+      - type: "welcome_email_series"
+        channel: "email"
+        template: "welcome_series"
+        frequency_touches: 2
+        frequency_window_days: 14
+        send_days: [1, 14]
+
+  retention:
+    high_risk:
+      - type: "competitive_cashback"
+        channel_digital: "push_notification"
+        channel_nondigital: "sms"
+        offer_type: "cashback"
+        offer_value_premium: 0.10
+        offer_value_standard: 0.07
+        offer_value_student: 0.05
+        offer_duration_days: 60
+        frequency_touches: 3
+        frequency_window_days: 7
+        send_days: [1, 4, 12]
+      - type: "rm_alert_premium"
+        channel: "crm_alert"
+        segment_filter: ["premium"]
+    medium_risk:
+      - type: "category_bonus_offer"
+        channel_digital: "push_notification"
+        channel_nondigital: "email"
+        offer_type: "points_multiplier"
+        offer_value_premium: 3
+        offer_value_standard: 2
+        offer_value_student: 1.5
+        offer_duration_days: 30
+        frequency_touches: 2
+        frequency_window_days: 14
+        send_days: [1, 8]
+    low_risk:
+      - type: "loyalty_points_summary"
+        channel: "email"
+        template: "points_summary"
+        frequency_touches: 1
+        frequency_window_days: 14
+        send_days: [1]
+
+  action_catalog:
+    welcome_email_series:
+      cost_per_customer: 0.10
+      baseline_response_rate: 0.08
+      incremental_lift: 0.023
+    first_use_cashback_offer:
+      cost_per_customer: 8.00
+      baseline_response_rate: 0.18
+      incremental_lift: 0.12
+    mcc_targeted_offer:
+      cost_per_customer: 6.00
+      baseline_response_rate: 0.22
+      incremental_lift: 0.15
+    recurring_txn_tutorial:
+      cost_per_customer: 0.20
+      baseline_response_rate: 0.12
+      incremental_lift: 0.07
+    push_notification_sequence:
+      cost_per_customer: 0.05
+      baseline_response_rate: 0.15
+      incremental_lift: 0.09
+    sms_activation_nudge:
+      cost_per_customer: 0.30
+      baseline_response_rate: 0.10
+      incremental_lift: 0.06
+    loyalty_points_summary:
+      cost_per_customer: 0.10
+      baseline_response_rate: 0.08
+      incremental_lift: 0.023
+    category_bonus_offer:
+      cost_per_customer: 8.00
+      baseline_response_rate: 0.22
+      incremental_lift: 0.148
+    competitive_cashback:
+      cost_per_customer: 12.00
+      baseline_response_rate: 0.18
+      incremental_lift: 0.121
+    digital_reengagement:
+      cost_per_customer: 0.50
+      baseline_response_rate: 0.14
+      incremental_lift: 0.08
+    lifestyle_change_survey:
+      cost_per_customer: 0.80
+      baseline_response_rate: 0.16
+      incremental_lift: 0.09
+    rm_alert_premium:
+      cost_per_customer: 40.00
+      baseline_response_rate: 0.35
+      incremental_lift: 0.18
+    reactivation_offer:
+      cost_per_customer: 20.00
+      baseline_response_rate: 0.25
+      incremental_lift: 0.15
+
+  priority_weights:
+    ltv:
+      premium: 3.0
+      standard: 1.5
+      student: 0.8
+    annual_revenue_per_customer: 1200
+    urgency_bonus_days_threshold: 45
+    urgency_bonus_value: 0.30
+
+  offer_action_templates:
+    grocery: "use_your_card_for_grocery_shopping_in_{window}d"
+    restaurant: "use_your_card_at_restaurants_{n_times}x_in_{window}d"
+    travel: "use_your_card_for_travel_purchases_in_{window}d"
+    fuel: "use_your_card_at_fuel_stations_{n_times}x_in_{window}d"
+    subscription: "set_up_a_subscription_or_autopay_with_your_card"
+    utility: "use_your_card_to_pay_a_utility_bill"
+    retail: "use_your_card_for_retail_shopping_in_{window}d"
+    entertainment: "use_your_card_for_entertainment_in_{window}d"
+    general: "make_your_first_purchase_with_your_card"
+
+  spend_threshold_by_segment:
+    premium: 200
+    standard: 100
+    student: 50
+
+  frequency_by_risk_band:
+    high_risk: 3
+    medium_risk: 2
+    low_risk: 1
+
+compliance:
+  sms_requires_express_written_consent: true
+  email_requires_opt_in: true
+  max_sms_per_month: 4
+  quiet_hours_start: "21:00"
+  quiet_hours_end: "08:00"
+  offer_terms_template_required: true
+  suppression_list_check: true
+
+pipeline:
+  output_dir: "outputs"
+  campaign_events_dir: "data/campaign_events"
+  last_run_metadata: "outputs/last_run_metadata.json"
+  max_emails_per_day: 200000
+  max_sms_per_day: 50000
+  max_calls_per_week: 5000
+
+evaluation:
+  holdout_fraction: 0.20
+  min_absolute_lift: 0.05
+  psi_alert_threshold: 0.25
+  retraining_drift_threshold: 0.05
+  alpha: 0.05
+  power: 0.80
+  min_detectable_effect: 0.03
+  avg_annual_revenue_per_customer: 1200
+  bootstrap_n_iterations: 1000

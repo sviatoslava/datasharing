@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agentic AI Tutor — Overview</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; padding: 2rem; }
+    .container { max-width: 860px; margin: 0 auto; }
+    header { display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 1px solid #1e293b; }
+    .status-badge { padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; }
+    .status-planned { background: #1e293b; color: #64748b; }
+    .status-launched { background: #052e16; color: #4ade80; }
+    h1 { font-size: 1.5rem; font-weight: 700; }
+    .subtitle { color: #64748b; font-size: 0.9rem; margin-top: 0.25rem; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+    .card { background: #1e293b; border-radius: 0.75rem; padding: 1.25rem; }
+    .card h3 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; margin-bottom: 0.75rem; }
+    .primitive-row { display: flex; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.5rem; font-size: 0.875rem; }
+    .primitive-row .emoji { width: 1.5rem; flex-shrink: 0; }
+    .primitive-row .label { color: #94a3b8; min-width: 90px; }
+    .primitive-row .value { color: #e2e8f0; }
+    .rubric-item { display: flex; gap: 0.5rem; align-items: flex-start; margin-bottom: 0.5rem; font-size: 0.875rem; }
+    .rubric-dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; margin-top: 5px; flex-shrink: 0; }
+    .curriculum { background: #1e293b; border-radius: 0.75rem; padding: 1.25rem; margin-bottom: 1rem; }
+    .curriculum h3 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; margin-bottom: 1rem; }
+    .week { margin-bottom: 1rem; }
+    .week-label { font-size: 0.75rem; font-weight: 600; color: #6366f1; margin-bottom: 0.4rem; }
+    .day { font-size: 0.8rem; color: #94a3b8; padding: 0.2rem 0; border-left: 2px solid #1e293b; padding-left: 0.75rem; margin-left: 0.25rem; }
+    .day.current { border-left-color: #4ade80; color: #e2e8f0; }
+    .ids { background: #1e293b; border-radius: 0.75rem; padding: 1.25rem; margin-bottom: 1rem; }
+    .ids h3 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; margin-bottom: 0.75rem; }
+    .id-row { display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid #0f1117; font-size: 0.8rem; }
+    .id-row:last-child { border-bottom: none; }
+    .id-label { color: #64748b; }
+    .id-value { color: #4ade80; font-family: monospace; }
+    .id-pending { color: #334155; font-style: italic; }
+    .deferred { background: #1e293b; border-radius: 0.75rem; padding: 1.25rem; }
+    .deferred h3 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; margin-bottom: 0.75rem; }
+    .deferred-item { display: flex; gap: 0.5rem; margin-bottom: 0.4rem; font-size: 0.8rem; }
+    .v-tag { font-size: 0.65rem; font-weight: 700; padding: 0.1rem 0.4rem; border-radius: 0.25rem; background: #1e3a5f; color: #60a5fa; flex-shrink: 0; margin-top: 1px; }
+    .v2-tag { background: #2d1b69; color: #a78bfa; }
+    footer { margin-top: 2rem; color: #334155; font-size: 0.75rem; text-align: center; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div>
+      <h1>🤖 Agentic AI Tutor</h1>
+      <div class="subtitle">Personal daily learning agent for Sviatoslava · sviatoslava.zelikovska@gmail.com</div>
+    </div>
+    <div style="margin-left:auto">
+      <span class="status-badge status-planned" id="status-badge">○ Planned</span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Primitives</h3>
+      <div class="primitive-row"><span class="emoji">🤖</span><span class="label">Agent</span><span class="value">Claude Opus, AI tutor</span></div>
+      <div class="primitive-row"><span class="emoji">📦</span><span class="label">Environment</span><span class="value">Network + Gmail SMTP</span></div>
+      <div class="primitive-row"><span class="emoji">🎯</span><span class="label">Outcome</span><span class="value">6-criterion rubric</span></div>
+      <div class="primitive-row"><span class="emoji">🗓️</span><span class="label">Deployment</span><span class="value">Daily 7pm Kyiv</span></div>
+      <div class="primitive-row"><span class="emoji">🔌</span><span class="label">Connector</span><span class="value">Gmail + Web search</span></div>
+      <div class="primitive-row"><span class="emoji">🧠</span><span class="label">Memory</span><span class="value">lesson-log.json</span></div>
+    </div>
+    <div class="card">
+      <h3>Success Rubric</h3>
+      <div class="rubric-item"><div class="rubric-dot"></div><div>Email delivered to student by end of run</div></div>
+      <div class="rubric-item"><div class="rubric-dot"></div><div>Lesson teaches one new concept in sequence</div></div>
+      <div class="rubric-item"><div class="rubric-dot"></div><div>Quiz has 3+ questions on previous lesson</div></div>
+      <div class="rubric-item"><div class="rubric-dot"></div><div>Analogies used before technical terms</div></div>
+      <div class="rubric-item"><div class="rubric-dot"></div><div>One resource ≤30 days old cited with URL</div></div>
+      <div class="rubric-item"><div class="rubric-dot"></div><div>Interactive exercise + model answer included</div></div>
+    </div>
+  </div>
+
+  <div class="ids">
+    <h3>Live IDs</h3>
+    <div class="id-row"><span class="id-label">Environment</span><span id="env-id" class="id-pending">pending launch</span></div>
+    <div class="id-row"><span class="id-label">Agent</span><span id="agent-id" class="id-pending">pending launch</span></div>
+    <div class="id-row"><span class="id-label">Model</span><span id="model-id" class="id-pending">pending launch</span></div>
+    <div class="id-row"><span class="id-label">Last Session</span><span id="session-id" class="id-pending">not yet run</span></div>
+    <div class="id-row"><span class="id-label">Deployment</span><span id="deployment-id" class="id-pending">pending launch</span></div>
+    <div class="id-row"><span class="id-label">Next Run</span><span id="next-run" class="id-pending">—</span></div>
+  </div>
+
+  <div class="curriculum">
+    <h3>40-Day Curriculum</h3>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 0 2rem;">
+      <div>
+        <div class="week"><div class="week-label">Week 1 — Foundations</div>
+          <div class="day current">1. What is an agent? LLM vs agent vs workflow</div>
+          <div class="day">2. The agent loop: perceive, reason, act, observe</div>
+          <div class="day">3. Tool use and function calling</div>
+          <div class="day">4. Prompt engineering for agents</div>
+          <div class="day">5. Agent architectures overview</div>
+        </div>
+        <div class="week"><div class="week-label">Week 2 — Orchestration</div>
+          <div class="day">6. Orchestration: ReAct pattern</div>
+          <div class="day">7. Orchestration: CoT and Tree-of-Thought</div>
+          <div class="day">8. Multi-agent systems</div>
+          <div class="day">9. Agent communication and delegation</div>
+          <div class="day">10. Handoffs and human-in-the-loop</div>
+        </div>
+        <div class="week"><div class="week-label">Week 3 — Memory</div>
+          <div class="day">11. Memory: short-term (context window)</div>
+          <div class="day">12. Memory: long-term (vector stores, RAG)</div>
+          <div class="day">13. Memory: semantic and episodic</div>
+          <div class="day">14. State management in agents</div>
+          <div class="day">15. Memory patterns in production</div>
+        </div>
+        <div class="week"><div class="week-label">Week 4 — Evaluation</div>
+          <div class="day">16. Evaluation fundamentals</div>
+          <div class="day">17. Building evals for agents</div>
+          <div class="day">18. Automated grading and LLM-as-judge</div>
+          <div class="day">19. Regression testing agents</div>
+          <div class="day">20. Eval-driven iteration</div>
+        </div>
+      </div>
+      <div>
+        <div class="week"><div class="week-label">Week 5 — Production</div>
+          <div class="day">21. Production deployment basics</div>
+          <div class="day">22. Observability and tracing</div>
+          <div class="day">23. Monitoring agents in production</div>
+          <div class="day">24. Cost and latency optimization</div>
+          <div class="day">25. Scaling agent systems</div>
+        </div>
+        <div class="week"><div class="week-label">Week 6 — Safety</div>
+          <div class="day">26. Safety and guardrails</div>
+          <div class="day">27. Reliability and failure modes</div>
+          <div class="day">28. Security considerations</div>
+          <div class="day">29. Ethical considerations</div>
+          <div class="day">30. Incident response for agents</div>
+        </div>
+        <div class="week"><div class="week-label">Week 7 — Advanced</div>
+          <div class="day">31. Advanced patterns: parallelization</div>
+          <div class="day">32. Advanced patterns: specialization</div>
+          <div class="day">33. Case study: customer support agent</div>
+          <div class="day">34. Case study: data pipeline agent</div>
+          <div class="day">35. Case study: research agent</div>
+        </div>
+        <div class="week"><div class="week-label">Week 8 — Mastery</div>
+          <div class="day">36. End-to-end build walkthrough</div>
+          <div class="day">37. Agentic AI landscape and future</div>
+          <div class="day">38. Building your portfolio agent</div>
+          <div class="day">39. Community, tools, and resources</div>
+          <div class="day">40. Graduation review and next steps</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="deferred">
+    <h3>Roadmap</h3>
+    <div class="deferred-item"><span class="v-tag">v1</span><span>Spaced repetition — re-quiz failed topics automatically</span></div>
+    <div class="deferred-item"><span class="v-tag">v1</span><span>Two-way quiz grading — reply to email, agent grades your answers</span></div>
+    <div class="deferred-item"><span class="v-tag v2-tag">v2</span><span>Learning style profile — adapts format after 7 days of data</span></div>
+    <div class="deferred-item"><span class="v-tag v2-tag">v2</span><span>Slack delivery — mirror lessons to personal Slack channel</span></div>
+    <div class="deferred-item"><span class="v-tag v2-tag">v2</span><span>Weekly progress dashboard — quiz scores, topics mastered</span></div>
+  </div>
+
+  <footer>Built with the launch-your-agent skill · github.com/anthropics/launch-your-agent</footer>
+</div>
+</body>
+</html>

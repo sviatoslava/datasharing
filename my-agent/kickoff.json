@@ -1,0 +1,15 @@
+{
+  "type": "user",
+  "content": "Run today's agentic AI tutoring session for Sviatoslava.\n\n1. Check /mnt/session/outputs/lesson-log.json to find the next lesson in sequence (start at lesson 1 if the file does not exist).\n2. Search the web for 2-3 fresh resources on today's topic (published in the last 30 days).\n3. Write a clear, analogy-first lesson. One concept only.\n4. If this is not lesson 1, write a 3-question quiz on the previous lesson's topic.\n5. Write one interactive exercise with a model answer.\n6. Send the full email to sviatoslava.zelikovska@gmail.com.\n7. Update the lesson log and write output to /mnt/session/outputs/lesson-output.md.\n\nToday is a new session — do not hard-code any dates. Use relative references only.",
+  "outcome": {
+    "criteria": [
+      "Email is delivered to sviatoslava.zelikovska@gmail.com by end of run",
+      "Lesson teaches exactly one new concept from the agentic AI curriculum in sequence",
+      "Quiz contains 3 or more questions grounded in the previous lesson (skipped on lesson 1)",
+      "Explanations use real-world analogies and plain language before any technical terms",
+      "At least one real article or resource from the last 30 days is cited with a URL",
+      "One interactive exercise with a model answer is included"
+    ],
+    "max_iterations": 5
+  }
+}

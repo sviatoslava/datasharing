@@ -1,0 +1,11 @@
+{
+  "network": {
+    "enabled": true
+  },
+  "packages": [],
+  "environment_variables": {
+    "GMAIL_USER": "sviatoslava.zelikovska@gmail.com",
+    "STUDENT_EMAIL": "sviatoslava.zelikovska@gmail.com",
+    "LESSON_LOG_PATH": "/mnt/session/outputs/lesson-log.json"
+  }
+}

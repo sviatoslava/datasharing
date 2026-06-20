@@ -1,0 +1,40 @@
+{
+  "agent_name": "agentic-ai-tutor",
+  "student": "Sviatoslava Zelikovska",
+  "student_email": "sviatoslava.zelikovska@gmail.com",
+  "student_level": "some ML/AI exposure, new to agentic systems",
+  "primitives": [
+    {"emoji": "🤖", "name": "Agent", "setting": "Claude Opus, AI tutor with 40-lesson curriculum"},
+    {"emoji": "📦", "name": "Environment", "setting": "Network enabled, Gmail + web search"},
+    {"emoji": "🎯", "name": "Outcome", "setting": "6-criterion rubric, see outcome.md"},
+    {"emoji": "🗓️", "name": "Deployment", "setting": "Daily 16:00 UTC = 7pm Kyiv (Europe/Kyiv)"},
+    {"emoji": "🔌", "name": "Connector", "setting": "Gmail SMTP (smtplib) + web search"},
+    {"emoji": "🧠", "name": "Memory store", "setting": "lesson-log.json in /mnt/session/outputs/"}
+  ],
+  "curriculum_length": 40,
+  "cadence": "daily",
+  "delivery": "email",
+  "schedule_cron": "0 16 * * *",
+  "schedule_timezone": "Europe/Kyiv",
+  "v1_deferred": [
+    "Spaced repetition (needs quiz score history after week 1)",
+    "Two-way quiz grading (needs Gmail OAuth read access)"
+  ],
+  "v2_deferred": [
+    "Learning style profile (needs 7+ sessions of data)",
+    "Slack delivery (needs Slack Bot Token)",
+    "Weekly progress dashboard"
+  ],
+  "credentials_needed": [
+    {"name": "ANTHROPIC_API_KEY", "where": "platform.anthropic.com → API keys", "store": "my-agent/.env"},
+    {"name": "GMAIL_APP_PASSWORD", "where": "Google Account → Security → App passwords (requires 2FA)", "store": "my-agent/.env"}
+  ],
+  "rubric": [
+    "Email delivered to student by end of run",
+    "Lesson teaches exactly one new concept in curriculum sequence",
+    "Quiz contains 3+ questions on the previous lesson (skipped on lesson 1)",
+    "Explanations use real-world analogies before technical terms",
+    "At least one real resource from the last 30 days cited with URL",
+    "One interactive exercise with model answer included"
+  ]
+}

@@ -5,7 +5,8 @@ by thinking through realistic user behavior and then **verifying each one agains
 code** (not just plausible-sounding fiction) — either via the executable scenario tests in
 `tests/test_scenarios.py`, or via a direct trace against `graph.py`/`knowledge.py` where noted.
 Two scenarios below surfaced real bugs, which are now fixed; two more surfaced real
-*limitations* that are still open — see "Known limitations" at the end.
+*limitations* that are still open — see "Known limitations" at the end. Scenario 9
+(ambiguous questions) started as a limitation itself, until a proper fix was built for it.
 
 All examples use the placeholder knowledge base (see the disclaimer in `README.md`) —
 content is representative, not real data from any specific bank.
@@ -139,6 +140,31 @@ User: (anywhere in the flow) exit
 Bot:  [conversation ends immediately, no extra message]
 ```
 Covered by `test_graph.py::test_exit_ends_conversation_without_extra_message`.
+
+---
+
+### 9. Ambiguous question — bot asks for clarification
+
+```
+User: (in product mode) what's the interest rate?
+Bot:  I can help with more than one of these — which are you asking about?
+      [Deposits] [Mortgages]
+User: (clicks) Mortgages
+Bot:  [grounded specifically in Mortgages — not a blended guess, and not the Deposits
+      content that also matched]
+```
+Deterministic, no LLM call for the clarification turn itself: `knowledge.retrieve_scored()`
+exposes each candidate's score, and `knowledge.is_ambiguous()` checks whether the top two
+are within 1.4x of each other. Picking an option sets `ChatState.forced_topic`, which
+bypasses retrieval scoring entirely on the next turn (`knowledge.get_chunk()` loads that
+exact topic directly) rather than trusting a short label like "Mortgages" to reliably
+re-retrieve to a single chunk on its own — it doesn't (verified: appending the topic name to
+the original ambiguous query still left both candidates above the confidence floor). See
+"Clarification questions" in `README.md` for the full mechanism and how the 1.4x threshold
+was calibrated against false positives (e.g. "how do I open a savings account?" also
+technically matches two topics but is answered directly, not treated as ambiguous).
+Covered by `test_graph.py::test_ambiguous_match_asks_for_clarification_instead_of_guessing`
+and `test_graph.py::test_picking_a_clarification_option_forces_that_exact_topic`.
 
 ---
 

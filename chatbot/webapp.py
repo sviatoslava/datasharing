@@ -86,6 +86,7 @@ def create_app(model: str = DEFAULT_MODEL, base_url: str | None = None, llm=None
             "allow_free_text": True,
             "stage": WELCOME_STAGE,
             "active_node": "assistant",
+            "forced_topic": None,
         }
         result = graph.invoke(initial_state, config=config)
         return _turn_response(thread_id, result)

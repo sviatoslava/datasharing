@@ -274,3 +274,64 @@ def test_topic_without_a_curated_entry_falls_back_to_model_generated_options():
         assert all(o["source"] == "model" for o in payload["options"])
     finally:
         graph_module.load_recommended_options = original
+
+
+def test_ambiguous_match_asks_for_clarification_instead_of_guessing():
+    import graph as graph_module
+    from knowledge import Chunk
+
+    # Deliberately close scores rather than relying on a fragile real-corpus example — the
+    # ambiguity threshold itself is unit-tested directly in test_knowledge.py. Starts straight
+    # from the welcome screen (free text, no "products" click) so the mock only ever needs to
+    # cover this one product_assistant call.
+    fake_scored = [
+        (Chunk(title="Deposits", text="deposits reference content"), 0.10),
+        (Chunk(title="Mortgages", text="mortgages reference content"), 0.09),
+    ]
+    original = graph_module.retrieve_scored
+    graph_module.retrieve_scored = lambda query, chunks=None, k=3: fake_scored
+    try:
+        llm = FakeLLM([])  # clarification is deterministic — should make no LLM call at all
+        graph, config, initial_state, _ = make_app(llm=llm)
+        graph.invoke(initial_state, config=config)
+
+        result = graph.invoke(Command(resume="what's the rate?"), config=config)
+
+        assert llm.calls == []
+        payload = result["__interrupt__"][0].value
+        labels = [o["label"] for o in payload["options"]]
+        assert labels == ["Deposits", "Mortgages"]
+        assert all(o["source"] == "predefined" for o in payload["options"])
+        assert all(o["topic_key"] for o in payload["options"])
+    finally:
+        graph_module.retrieve_scored = original
+
+
+def test_picking_a_clarification_option_forces_that_exact_topic():
+    import graph as graph_module
+    from knowledge import Chunk
+
+    fake_scored = [
+        (Chunk(title="Deposits", text="deposits reference content"), 0.10),
+        (Chunk(title="Mortgages", text="mortgages reference content"), 0.09),
+    ]
+    original = graph_module.retrieve_scored
+    graph_module.retrieve_scored = lambda query, chunks=None, k=3: fake_scored
+    try:
+        llm = FakeLLM(['{"reply": "Mortgage rates vary.", "options": [], "allow_free_text": true}'])
+        graph, config, initial_state, _ = make_app(llm=llm)
+        graph.invoke(initial_state, config=config)
+        result = graph.invoke(Command(resume="what's the rate?"), config=config)
+        payload = result["__interrupt__"][0].value
+        mortgages_id = next(o["id"] for o in payload["options"] if o["label"] == "Mortgages")
+
+        graph.invoke(Command(resume=mortgages_id), config=config)
+
+        # forced_topic looks the chosen topic up directly (get_chunk), bypassing retrieve_scored
+        # entirely, so it's grounded in the real Mortgages content — not the other candidate.
+        system_content = llm.calls[-1][0].content
+        assert "Mortgages (Home Loans)" in system_content
+        assert "down payment" in system_content
+        assert "Deposits & Savings" not in system_content
+    finally:
+        graph_module.retrieve_scored = original

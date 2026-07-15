@@ -83,13 +83,16 @@ python webapp.py --demo
     against the `AssistantTurn` Pydantic schema (deduping/trimming options, falling back to
     raw text if parsing fails).
   - `product_assistant` is the same pattern, but first retrieves the top matching chunks
-    from the local `knowledge/` files (via `knowledge.retrieve`, a dependency-free TF-IDF
-    scorer with stopword filtering, light plural stemming, and a title-match boost — no
-    embedding model or vector DB needed for a handful of short documents) and injects them
-    into a system prompt (`PRODUCT_SYSTEM_PROMPT`) that instructs the model to answer *only*
-    from that reference material and to repeat the demo/placeholder disclaimer. If nothing
-    scores above a confidence floor, `retrieve()` returns `[]` and the prompt says so
-    explicitly, rather than grounding the model in an arbitrary/unrelated chunk.
+    from the local `knowledge/` files (via `knowledge.retrieve`/`retrieve_scored`, a
+    dependency-free TF-IDF scorer with stopword filtering, light plural stemming, and a
+    title-match boost — no embedding model or vector DB needed for a handful of short
+    documents) and injects them into a system prompt (`PRODUCT_SYSTEM_PROMPT`) that instructs
+    the model to answer *only* from that reference material and to repeat the demo/placeholder
+    disclaimer. If nothing scores above a confidence floor, retrieval returns `[]` and the
+    prompt says so explicitly, rather than grounding the model in an arbitrary/unrelated
+    chunk. If the top two matches are too close to call (`knowledge.is_ambiguous`, ratio-based
+    — see "Clarification questions" below), it asks which topic the user means instead of
+    guessing or blending both into one answer.
     After the model replies, its **options are overridden by curated ones** from
     `knowledge/options.json` when the matched topic (or `"fallback"`, for no match) has an
     entry there — more reliable than trusting a small model to invent a good menu every
@@ -116,6 +119,42 @@ python webapp.py --demo
 
 Swap in a different model by changing `--model`, or point `--base-url` at a remote Ollama
 instance instead of running one locally.
+
+## Clarification questions
+
+When a question plausibly matches more than one product topic and the match is too close to
+call, the bot asks which one you mean instead of guessing or blending both into one answer:
+
+```
+User: what's the interest rate?
+Bot:  I can help with more than one of these — which are you asking about?
+      [Deposits] [Mortgages]
+User: (clicks) Mortgages
+Bot:  [answer grounded specifically in the Mortgages knowledge file]
+```
+
+This is fully deterministic — no LLM call is spent on the clarification turn itself:
+
+1. `knowledge.retrieve_scored()` returns each candidate topic's score, not just the ranked
+   list.
+2. `knowledge.is_ambiguous()` checks whether the top two are within `_AMBIGUITY_RATIO`
+   (1.4x) of each other. Calibrated against real queries in the corpus — e.g. "how do I open
+   a savings account?" scores Deposits and Mobile App both above the confidence floor (they
+   share the generic word "account"), but at a clear-enough 1.43x ratio it answers directly
+   rather than interrupting with an unnecessary clarification prompt.
+3. If ambiguous, `product_assistant` returns a clarification turn with one option per
+   candidate topic. Each option carries a `topic_key` (a `ChatOption` field distinct from
+   `action`) rather than relying on the topic name alone to re-retrieve correctly next turn.
+4. Picking an option sets `ChatState.forced_topic`, which the next `product_assistant` call
+   uses to load that exact chunk directly via `knowledge.get_chunk()` — bypassing retrieval
+   scoring entirely for that turn, since text-based re-ranking on a short label like
+   "Mortgages" isn't reliable enough to guarantee landing on the intended topic when a second
+   candidate is also written about it. The original question stays in the conversation
+   history throughout, so the eventual grounded answer still addresses exactly what was
+   asked, not just "tell me about mortgages" generically.
+
+This only fires for genuinely close ties — see `test_no_false_positive_ambiguity_on_the_real_corpus`
+in `tests/test_knowledge.py` for the specific queries it was checked against.
 
 ## Using real content
 

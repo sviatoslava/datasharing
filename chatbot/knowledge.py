@@ -67,6 +67,14 @@ def load_chunks(directory: Path = KNOWLEDGE_DIR) -> list[Chunk]:
     ]
 
 
+def get_chunk(topic_key: str, chunks: list[Chunk] | None = None) -> Chunk | None:
+    """Look up a chunk by its topic_key directly, bypassing scoring — used to force a specific
+    topic (e.g. after the user resolves an ambiguous-match clarification) rather than trusting
+    retrieve() to land on it again from text alone."""
+    chunks = load_chunks() if chunks is None else chunks
+    return next((c for c in chunks if c.topic_key == topic_key), None)
+
+
 def load_recommended_options(topic_key: str) -> list[dict] | None:
     """Curated follow-up options for a topic (or "fallback" for no confident match), from
     options.json — see that file for the fields each entry accepts. Returns None if the file
@@ -99,11 +107,16 @@ _MIN_SCORE = 0.045
 # on term frequency alone to surface it.
 _TITLE_MATCH_BOOST = 0.05
 
+# Empirically, queries with one clear intended topic score their top match at 1.4x+ the
+# runner-up even when a second chunk also incidentally clears _MIN_SCORE (e.g. "savings
+# account" -> Deposits 1.43x Mobile App, both mentioning "account"). Below that ratio, the top
+# two are genuinely too close to call — worth asking rather than guessing.
+_AMBIGUITY_RATIO = 1.4
 
-def retrieve(query: str, chunks: list[Chunk] | None = None, k: int = 3) -> list[Chunk]:
-    """Return up to k chunks confidently relevant to query, or [] if nothing scores highly
-    enough to trust — callers should treat an empty result as "no matching reference material"
-    rather than silently falling back to an arbitrary/unrelated chunk."""
+
+def retrieve_scored(query: str, chunks: list[Chunk] | None = None, k: int = 3) -> list[tuple[Chunk, float]]:
+    """Like retrieve(), but also returns each chunk's score so callers can judge confidence —
+    e.g. via is_ambiguous() — rather than just taking the ranked list at face value."""
     chunks = load_chunks() if chunks is None else chunks
     if not chunks:
         return []
@@ -120,4 +133,21 @@ def retrieve(query: str, chunks: list[Chunk] | None = None, k: int = 3) -> list[
         scored.append((chunk, score))
     scored.sort(key=lambda pair: pair[1], reverse=True)
 
-    return [chunk for chunk, score in scored[:k] if score >= _MIN_SCORE]
+    return [(chunk, score) for chunk, score in scored[:k] if score >= _MIN_SCORE]
+
+
+def retrieve(query: str, chunks: list[Chunk] | None = None, k: int = 3) -> list[Chunk]:
+    """Return up to k chunks confidently relevant to query, or [] if nothing scores highly
+    enough to trust — callers should treat an empty result as "no matching reference material"
+    rather than silently falling back to an arbitrary/unrelated chunk."""
+    return [chunk for chunk, _ in retrieve_scored(query, chunks, k)]
+
+
+def is_ambiguous(scored: list[tuple[Chunk, float]]) -> bool:
+    """True when the top two scored candidates (from retrieve_scored) are too close together
+    to confidently pick one — the caller should ask the user to disambiguate instead of
+    guessing or silently blending both into one answer."""
+    if len(scored) < 2:
+        return False
+    top_score, second_score = scored[0][1], scored[1][1]
+    return second_score > 0 and (top_score / second_score) < _AMBIGUITY_RATIO

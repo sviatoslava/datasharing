@@ -8,7 +8,7 @@ from langgraph.graph.message import add_messages
 from langgraph.types import interrupt, Command
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
-from knowledge import load_recommended_options, retrieve
+from knowledge import Chunk, get_chunk, is_ambiguous, load_recommended_options, retrieve_scored
 
 DEFAULT_MODEL = "qwen2.5:1.5b"
 WELCOME_STAGE = "welcome"
@@ -57,6 +57,10 @@ class ChatOption(BaseModel):
     value: str | None = None
     source: Literal["model", "predefined"] = "model"
     action: str | None = None  # graph node name to route to; None = replay as user text
+    # Forces product_assistant to ground on this exact knowledge topic next turn, bypassing
+    # retrieve() — used by clarification options, where text-based re-retrieval on a short
+    # label like "Mortgages" isn't reliable enough to guarantee landing on the right topic.
+    topic_key: str | None = None
 
     def resolved_value(self) -> str:
         return self.value or self.label
@@ -127,6 +131,8 @@ class ChatState(TypedDict):
     active_node: str  # which LLM-backed node produced the current turn; human()'s routing
     # default when the picked option has no explicit `action`, so a conversation stays in
     # whichever flow (assistant / product_assistant / ...) it's currently in.
+    forced_topic: str | None  # set by human() when a clarification option is picked; consumed
+    # (reset to None) by product_assistant on the very next turn — see ChatOption.topic_key.
 
 
 def build_graph(model: str = DEFAULT_MODEL, base_url: str | None = None, llm=None):
@@ -166,11 +172,47 @@ def build_graph(model: str = DEFAULT_MODEL, base_url: str | None = None, llm=Non
 
         return _generate_turn(SYSTEM_PROMPT, state, active_node="assistant")
 
+    def _clarify_turn(chunks: list[Chunk]) -> ChatState:
+        # Deterministic — no LLM call needed for an ambiguous match. Each option locks in one
+        # candidate topic (via topic_key) rather than hoping the topic name alone re-retrieves
+        # unambiguously; the original question stays in the message history either way, so the
+        # eventual grounded answer still addresses what was actually asked.
+        options = [
+            ChatOption(
+                id=f"clarify_{i}",
+                label=chunk.title,
+                value=chunk.title,
+                source="predefined",
+                topic_key=chunk.topic_key,
+            ).model_dump()
+            for i, chunk in enumerate(chunks, start=1)
+        ]
+        return {
+            "messages": [
+                AIMessage(content="I can help with more than one of these — which are you asking about?")
+            ],
+            "options": options,
+            "allow_free_text": True,
+            "stage": None,
+            "active_node": "product_assistant",
+            "forced_topic": None,
+        }
+
     def product_assistant(state: ChatState) -> ChatState:
         last_user_text = next(
             (m.content for m in reversed(state["messages"]) if m.type == "human"), ""
         )
-        chunks = retrieve(last_user_text)
+
+        forced_topic = state.get("forced_topic")
+        if forced_topic:
+            forced_chunk = get_chunk(forced_topic)
+            chunks = [forced_chunk] if forced_chunk else [c for c, _ in retrieve_scored(last_user_text)]
+        else:
+            scored = retrieve_scored(last_user_text)
+            if is_ambiguous(scored):
+                return _clarify_turn([c for c, _ in scored])
+            chunks = [c for c, _ in scored]
+
         if chunks:
             context = "\n\n".join(f"### {c.title}\n{c.text}" for c in chunks)
             topic_key = chunks[0].topic_key
@@ -183,6 +225,7 @@ def build_graph(model: str = DEFAULT_MODEL, base_url: str | None = None, llm=Non
 
         system_prompt = PRODUCT_SYSTEM_PROMPT.format(context=context)
         turn = _generate_turn(system_prompt, state, active_node="product_assistant")
+        turn["forced_topic"] = None  # consumed — only applies to the turn it was set for
 
         # Curated options (knowledge/options.json) take priority over model-generated ones
         # when available for this topic — more reliable than trusting a small model to invent
@@ -231,7 +274,11 @@ def build_graph(model: str = DEFAULT_MODEL, base_url: str | None = None, llm=Non
             else state.get("active_node", "assistant")
         )
 
-        return Command(goto=goto, update={"messages": [HumanMessage(content=resolved_text)]})
+        update = {"messages": [HumanMessage(content=resolved_text)]}
+        if selected and selected.get("topic_key"):
+            update["forced_topic"] = selected["topic_key"]
+
+        return Command(goto=goto, update=update)
 
     def handoff(state: ChatState) -> ChatState:
         return {

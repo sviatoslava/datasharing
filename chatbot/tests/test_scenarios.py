@@ -67,18 +67,24 @@ def test_card_inquiry_multi_turn():
         [
             '{"reply": "Sure, what would you like to know?", "options": [], "allow_free_text": true}',
             '{"reply": "Cards often include cashback on everyday purchases.", '
-            '"options": ["How do I apply?", "Card security"], "allow_free_text": true}',
+            '"options": ["ignored — Cards has curated options"], "allow_free_text": true}',
             '{"reply": "An income and credit check is standard.", "options": [], "allow_free_text": true}',
         ]
     )
     graph, config = _start(llm)
 
     graph.invoke(Command(resume="products"), config=config)
-    graph.invoke(Command(resume="Tell me about credit card rewards"), config=config)
+    result = graph.invoke(Command(resume="Tell me about credit card rewards"), config=config)
     assert "Cards" in llm.calls[-1][0].content
 
-    # follow-up via clicking a generated option (id "opt_1" = "How do I apply?")
-    result = graph.invoke(Command(resume="opt_1"), config=config)
+    # Cards has curated options in knowledge/options.json, which override whatever the model
+    # generated — "opt_2" is that list's "How do I apply?" entry.
+    payload = result["__interrupt__"][0].value
+    labels = [o["label"] for o in payload["options"]]
+    assert labels == ["Annual & monthly fees", "How do I apply?", "Card security features"]
+    assert all(o["source"] == "predefined" for o in payload["options"])
+
+    result = graph.invoke(Command(resume="opt_2"), config=config)
 
     # stayed in the grounded product flow, didn't bounce back to generic chat
     assert "Reference material:" in llm.calls[-1][0].content

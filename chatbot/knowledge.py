@@ -4,6 +4,7 @@ Pure-Python TF-IDF scoring — no embedding model or vector DB — since the cor
 handful of short reference documents. This also keeps retrieval fully testable without a
 running LLM.
 """
+import json
 import math
 import re
 from collections import Counter
@@ -11,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 KNOWLEDGE_DIR = Path(__file__).parent / "knowledge"
+OPTIONS_FILE = KNOWLEDGE_DIR / "options.json"
 _WORD_RE = re.compile(r"[a-zA-Z]+")
 
 # Common words carry near-zero topical signal but can still have high IDF (rare enough to
@@ -51,12 +53,29 @@ class Chunk:
     def title_tokens(self) -> set[str]:
         return set(_tokenize(self.title))
 
+    @property
+    def topic_key(self) -> str:
+        # Inverse of load_chunks()'s title derivation (path.stem.replace("_", " ").title()),
+        # so a retrieved chunk maps back to its options.json key without re-deriving it twice.
+        return self.title.lower().replace(" ", "_")
+
 
 def load_chunks(directory: Path = KNOWLEDGE_DIR) -> list[Chunk]:
     return [
         Chunk(title=path.stem.replace("_", " ").title(), text=path.read_text())
         for path in sorted(directory.glob("*.md"))
     ]
+
+
+def load_recommended_options(topic_key: str) -> list[dict] | None:
+    """Curated follow-up options for a topic (or "fallback" for no confident match), from
+    options.json — see that file for the fields each entry accepts. Returns None if the file
+    is missing or has no entry for topic_key, so callers can fall back to model-generated
+    options rather than showing nothing."""
+    if not OPTIONS_FILE.exists():
+        return None
+    all_options = json.loads(OPTIONS_FILE.read_text())
+    return all_options.get(topic_key)
 
 
 def _build_idf(chunk_counts: list[Counter]) -> dict[str, float]:

@@ -56,11 +56,16 @@ User: (clicks) Ask about products & services
 Bot:  Sure, what would you like to know?
 User: Tell me about credit card rewards
 Bot:  [grounded in Cards — cashback/rewards points, bonus categories]
-      [How do I apply?] [Card security] [Something else]
+      [Annual & monthly fees] [How do I apply?] [Card security features]
 User: (clicks) How do I apply?
 Bot:  [continues, still in product_assistant flow — active_node persisted]
 ```
-Covered by `test_scenarios.py::test_card_inquiry_multi_turn`.
+The three options shown are **curated** (`knowledge/options.json`'s `"cards"` entry), not
+model-generated — `product_assistant` overrides whatever options the model proposed with the
+curated list for the matched topic when one exists, falling back to the model's own options
+only for topics with no `options.json` entry. See `knowledge/options.json` to edit these.
+Covered by `test_scenarios.py::test_card_inquiry_multi_turn` and
+`test_graph.py::test_curated_options_override_model_generated_ones_for_a_known_topic`.
 
 ---
 

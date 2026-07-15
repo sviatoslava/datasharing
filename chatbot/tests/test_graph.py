@@ -49,7 +49,7 @@ def test_welcome_stage_is_predefined_and_skips_the_llm():
     assert all(o["source"] == "predefined" for o in payload["options"])
     assert next(o for o in payload["options"] if o["id"] == "products")["action"] == "product_assistant"
     assert next(o for o in payload["options"] if o["id"] == "human")["action"] == "handoff"
-    assert next(o for o in payload["options"] if o["id"] == "chat")["action"] is None
+    assert next(o for o in payload["options"] if o["id"] == "chat")["action"] == "assistant"
 
 
 def test_predefined_option_with_action_routes_to_handoff_and_ends():
@@ -203,3 +203,74 @@ def test_product_assistant_tells_the_model_when_nothing_matches_instead_of_guess
     # no chunk matched — the prompt should say so explicitly rather than injecting a stray one
     assert "No matching reference material" in system_content
     assert "###" not in system_content
+
+
+def test_curated_options_override_model_generated_ones_for_a_known_topic():
+    llm = FakeLLM(
+        [
+            '{"reply": "Sure, ask away!", "options": [], "allow_free_text": true}',
+            '{"reply": "Typically 10-20%.", "options": ["should be discarded"], "allow_free_text": false}',
+        ]
+    )
+    graph, config, initial_state, _ = make_app(llm=llm)
+    graph.invoke(initial_state, config=config)
+    graph.invoke(Command(resume="products"), config=config)
+
+    result = graph.invoke(Command(resume="How much down payment do I need for a mortgage?"), config=config)
+
+    payload = result["__interrupt__"][0].value
+    labels = [o["label"] for o in payload["options"]]
+    assert labels == ["Down payment amount", "Government programs", "Refinancing"]
+    assert all(o["source"] == "predefined" for o in payload["options"])
+    # curated menus always allow free text too, regardless of what the model said
+    assert payload["allow_free_text"] is True
+
+
+def test_fallback_curated_options_used_when_no_topic_matches():
+    llm = FakeLLM(
+        [
+            '{"reply": "Sure, ask away!", "options": [], "allow_free_text": true}',
+            '{"reply": "I do not have that information.", "options": [], "allow_free_text": true}',
+        ]
+    )
+    graph, config, initial_state, _ = make_app(llm=llm)
+    graph.invoke(initial_state, config=config)
+    graph.invoke(Command(resume="products"), config=config)
+
+    result = graph.invoke(Command(resume="What's Halyk Bank's current CEO?"), config=config)
+
+    payload = result["__interrupt__"][0].value
+    handoff_opt = next(o for o in payload["options"] if o["label"] == "Talk to a human")
+    assert handoff_opt["action"] == "handoff"
+
+    # and picking it actually reaches the handoff node, not just decoration
+    result = graph.invoke(Command(resume=handoff_opt["id"]), config=config)
+    assert "__interrupt__" not in result
+    assert "human agent" in result["messages"][-1].content
+
+
+def test_topic_without_a_curated_entry_falls_back_to_model_generated_options():
+    import graph as graph_module
+
+    original = graph_module.load_recommended_options
+    graph_module.load_recommended_options = lambda topic_key: None
+    try:
+        llm = FakeLLM(
+            [
+                '{"reply": "Sure, ask away!", "options": [], "allow_free_text": true}',
+                '{"reply": "Typically 10-20%.", "options": ["model option A", "model option B"], '
+                '"allow_free_text": true}',
+            ]
+        )
+        graph, config, initial_state, _ = make_app(llm=llm)
+        graph.invoke(initial_state, config=config)
+        graph.invoke(Command(resume="products"), config=config)
+
+        result = graph.invoke(Command(resume="How much down payment for a mortgage?"), config=config)
+
+        payload = result["__interrupt__"][0].value
+        labels = [o["label"] for o in payload["options"]]
+        assert labels == ["model option A", "model option B"]
+        assert all(o["source"] == "model" for o in payload["options"])
+    finally:
+        graph_module.load_recommended_options = original

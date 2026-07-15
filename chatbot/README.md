@@ -90,6 +90,12 @@ python webapp.py --demo
     from that reference material and to repeat the demo/placeholder disclaimer. If nothing
     scores above a confidence floor, `retrieve()` returns `[]` and the prompt says so
     explicitly, rather than grounding the model in an arbitrary/unrelated chunk.
+    After the model replies, its **options are overridden by curated ones** from
+    `knowledge/options.json` when the matched topic (or `"fallback"`, for no match) has an
+    entry there — more reliable than trusting a small model to invent a good menu every
+    turn. Topics without a curated entry keep the model's own options, so adding a new
+    `knowledge/*.md` file works immediately even before its `options.json` entry is filled
+    in.
   - `human` pauses the graph with `interrupt()`, handing control back to the caller. When
     resumed, numeric input or an option's `id` is mapped back to the matching option; each
     option (`ChatOption`) carries an `id`, `label`, `value` (defaults to `label`), `source`
@@ -123,6 +129,12 @@ To replace the placeholder knowledge base with real, sourced product information
    shouldn't be presented as one without the bank's involvement.
 3. `knowledge.retrieve()` and `product_assistant` need no code changes — they just index
    whatever `.md` files are in `knowledge/`.
+4. Optionally add a matching entry to `knowledge/options.json` (key = the new file's stem,
+   e.g. `savings_bonds.md` → `"savings_bonds"`) to give that topic curated follow-up options
+   instead of leaving them to the model. Each entry is `{"label": "...", "value": "...",
+   "action": "..."}` — only `label` is required; `value` defaults to `label`, `action` is
+   only needed to route to another node (e.g. `"handoff"`) instead of continuing the topic.
+   No entry needed — the model's own generated options are used as a fallback.
 
 ## Common conversation scenarios
 

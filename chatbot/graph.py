@@ -8,7 +8,7 @@ from langgraph.graph.message import add_messages
 from langgraph.types import interrupt, Command
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
-from knowledge import retrieve
+from knowledge import load_recommended_options, retrieve
 
 DEFAULT_MODEL = "qwen2.5:1.5b"
 WELCOME_STAGE = "welcome"
@@ -110,7 +110,7 @@ PREDEFINED_MENUS: dict[str, StageMenu] = {
                 source="predefined",
                 action="product_assistant",
             ),
-            ChatOption(id="chat", label="Something else", source="predefined"),
+            ChatOption(id="chat", label="Something else", source="predefined", action="assistant"),
             ChatOption(id="human", label="Talk to a human", source="predefined", action="handoff"),
         ],
     ),
@@ -172,14 +172,38 @@ def build_graph(model: str = DEFAULT_MODEL, base_url: str | None = None, llm=Non
             (m.content for m in reversed(state["messages"]) if m.type == "human"), ""
         )
         chunks = retrieve(last_user_text)
-        context = (
-            "\n\n".join(f"### {c.title}\n{c.text}" for c in chunks)
-            if chunks
-            else "(No matching reference material found for this question — say so rather "
-            "than guessing, and suggest the product categories you *can* help with.)"
-        )
+        if chunks:
+            context = "\n\n".join(f"### {c.title}\n{c.text}" for c in chunks)
+            topic_key = chunks[0].topic_key
+        else:
+            context = (
+                "(No matching reference material found for this question — say so rather "
+                "than guessing, and suggest the product categories you *can* help with.)"
+            )
+            topic_key = "fallback"
+
         system_prompt = PRODUCT_SYSTEM_PROMPT.format(context=context)
-        return _generate_turn(system_prompt, state, active_node="product_assistant")
+        turn = _generate_turn(system_prompt, state, active_node="product_assistant")
+
+        # Curated options (knowledge/options.json) take priority over model-generated ones
+        # when available for this topic — more reliable than trusting a small model to invent
+        # a good, correctly-scoped menu every turn. Falls back to the model's own options
+        # (already in `turn`) when the topic has no curated entry.
+        recommended = load_recommended_options(topic_key)
+        if recommended:
+            turn["options"] = [
+                ChatOption(
+                    id=f"opt_{i}",
+                    label=o["label"],
+                    value=o.get("value"),
+                    source="predefined",
+                    action=o.get("action"),
+                ).model_dump()
+                for i, o in enumerate(recommended, start=1)
+            ]
+            turn["allow_free_text"] = True
+
+        return turn
 
     def human(state: ChatState) -> Command:
         options = state["options"]

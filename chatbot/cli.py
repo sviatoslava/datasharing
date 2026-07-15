@@ -8,16 +8,17 @@ Type "exit" or "quit" to end the conversation.
 """
 import argparse
 
+from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
-from graph import build_graph, DEFAULT_MODEL
+from graph import build_graph, DEFAULT_MODEL, WELCOME_STAGE
 
 
 def render_turn(payload: dict) -> None:
     print(f"\nBot: {payload['reply']}")
     for i, option in enumerate(payload.get("options") or [], start=1):
-        print(f"  [{i}] {option}")
+        print(f"  [{i}] {option['label']}")
 
 
 def main() -> None:
@@ -30,8 +31,10 @@ def main() -> None:
     config = {"configurable": {"thread_id": "cli-session"}}
 
     print(f"Chatbot ready (model: {args.model}). Type 'exit' to quit.")
-    result = graph.invoke({"messages": [], "options": []}, config=config)
+    initial_state = {"messages": [], "options": [], "allow_free_text": True, "stage": WELCOME_STAGE}
+    result = graph.invoke(initial_state, config=config)
 
+    quitting = False
     while "__interrupt__" in result:
         payload = result["__interrupt__"][0].value
         render_turn(payload)
@@ -40,10 +43,16 @@ def main() -> None:
         if not user_input:
             continue
 
+        quitting = user_input.lower() in {"exit", "quit"}
         result = graph.invoke(Command(resume=user_input), config=config)
 
-        if user_input.lower() in {"exit", "quit"}:
+        if quitting:
             break
+
+    if not quitting:
+        final_messages = result.get("messages") or []
+        if final_messages and isinstance(final_messages[-1], AIMessage):
+            print(f"\nBot: {final_messages[-1].content}")
 
     print("\nGoodbye!")
 

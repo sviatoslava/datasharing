@@ -1,0 +1,32 @@
+{
+  "cards": [
+    { "label": "Annual & monthly fees" },
+    { "label": "How do I apply?" },
+    { "label": "Card security features" }
+  ],
+  "deposits": [
+    { "label": "Current interest rates" },
+    { "label": "How to open one" },
+    { "label": "Early withdrawal rules" }
+  ],
+  "loans": [
+    { "label": "Required documents" },
+    { "label": "Interest rates" },
+    { "label": "Early repayment" }
+  ],
+  "mortgages": [
+    { "label": "Down payment amount" },
+    { "label": "Government programs" },
+    { "label": "Refinancing" }
+  ],
+  "mobile_app": [
+    { "label": "Account security" },
+    { "label": "Opening an account in-app" },
+    { "label": "Support options" }
+  ],
+  "fallback": [
+    { "label": "Ask about cards" },
+    { "label": "Ask about deposits" },
+    { "label": "Talk to a human", "action": "handoff" }
+  ]
+}

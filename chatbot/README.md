@@ -19,7 +19,7 @@ suggested replies; you can type the number to pick one, or just type free text.
    pip install -r requirements.txt
    ```
 
-## Run
+## Run — CLI
 
 ```bash
 python cli.py
@@ -32,6 +32,29 @@ python cli.py --model qwen2.5:3b --base-url http://localhost:11434
 ```
 
 Type `exit` or `quit` to end the conversation.
+
+## Run — web UI
+
+A small FastAPI + vanilla-JS chat page with clickable option buttons, backed by the same
+graph as the CLI:
+
+```bash
+python webapp.py --model qwen2.5:1.5b
+```
+
+Then open http://127.0.0.1:8000/ in a browser. Options: `--base-url`, `--host`, `--port`.
+
+Try it without a running Ollama server using a canned local stand-in (cycles through a few
+scripted reply/menu pairs instead of calling a real model — useful for trying the UI/UX or
+for environments where Ollama isn't reachable):
+
+```bash
+python webapp.py --demo
+```
+
+`GET /` serves the page; `POST /api/start` begins a session (returns a `thread_id`);
+`POST /api/message {thread_id, text}` resumes the conversation — `text` can be an option's
+`id` (from a button click) or free-typed text.
 
 ## How it works
 
@@ -73,3 +96,6 @@ pytest tests/ -v
 Covers: the predefined welcome menu (no LLM call), `action`-based routing to `handoff`,
 falling through to the LLM for non-action options, option deduping/capping, the malformed-JSON
 fallback path, numeric-to-value resolution, free-text passthrough, and `exit`.
+
+Both `cli.py` and `webapp.py` need a real Ollama server + pulled model to talk to an actual
+Qwen model (`webapp.py --demo` and the pytest suite don't — they use stand-ins).

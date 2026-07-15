@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Menu-driven chatbot</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    max-width: 640px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    background: Canvas;
+    color: CanvasText;
+  }
+  h1 { font-size: 1.1rem; opacity: 0.7; font-weight: 600; }
+  #log { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1rem; }
+  .msg { padding: 0.6rem 0.9rem; border-radius: 0.9rem; max-width: 80%; line-height: 1.4; }
+  .bot { background: #e9e9f2; color: #1a1a1a; align-self: flex-start; border-bottom-left-radius: 0.2rem; }
+  .user { background: #4f46e5; color: white; align-self: flex-end; border-bottom-right-radius: 0.2rem; }
+  @media (prefers-color-scheme: dark) {
+    .bot { background: #2a2a35; color: #f0f0f0; }
+  }
+  #options { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+  .option-btn {
+    padding: 0.45rem 0.8rem;
+    border-radius: 1.2rem;
+    border: 1px solid #4f46e5;
+    background: transparent;
+    color: #4f46e5;
+    cursor: pointer;
+    font-size: 0.9rem;
+  }
+  .option-btn:hover { background: #4f46e5; color: white; }
+  form { display: flex; gap: 0.5rem; }
+  input[type=text] {
+    flex: 1;
+    padding: 0.6rem 0.8rem;
+    border-radius: 0.6rem;
+    border: 1px solid #999;
+    font-size: 1rem;
+  }
+  button[type=submit] {
+    padding: 0.6rem 1rem;
+    border-radius: 0.6rem;
+    border: none;
+    background: #4f46e5;
+    color: white;
+    cursor: pointer;
+  }
+  #hint { font-size: 0.8rem; opacity: 0.6; margin-top: 0.4rem; }
+</style>
+</head>
+<body>
+  <h1>Menu-driven chatbot (LangGraph + Qwen)</h1>
+  <div id="log"></div>
+  <div id="options"></div>
+  <form id="form">
+    <input id="text" type="text" placeholder="Type a message..." autocomplete="off">
+    <button type="submit">Send</button>
+  </form>
+  <div id="hint"></div>
+
+<script>
+let threadId = null;
+
+const log = document.getElementById("log");
+const optionsEl = document.getElementById("options");
+const form = document.getElementById("form");
+const textEl = document.getElementById("text");
+const hintEl = document.getElementById("hint");
+
+function addMessage(text, who) {
+  const div = document.createElement("div");
+  div.className = "msg " + who;
+  div.textContent = text;
+  log.appendChild(div);
+  div.scrollIntoView({ behavior: "smooth", block: "end" });
+}
+
+function renderTurn(data) {
+  threadId = data.thread_id;
+  addMessage(data.reply, "bot");
+  optionsEl.innerHTML = "";
+  (data.options || []).forEach(opt => {
+    const btn = document.createElement("button");
+    btn.className = "option-btn";
+    btn.textContent = opt.label;
+    btn.onclick = () => sendMessage(opt.id, opt.label);
+    optionsEl.appendChild(btn);
+  });
+  if (data.done) {
+    hintEl.textContent = "Conversation ended.";
+    textEl.disabled = true;
+    form.querySelector("button").disabled = true;
+  } else {
+    hintEl.textContent = data.allow_free_text
+      ? "Pick an option above, or type your own message."
+      : "Please pick one of the options above.";
+  }
+}
+
+async function sendMessage(payloadText, displayText) {
+  addMessage(displayText, "user");
+  optionsEl.innerHTML = "";
+  const res = await fetch("/api/message", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ thread_id: threadId, text: payloadText }),
+  });
+  renderTurn(await res.json());
+}
+
+form.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const value = textEl.value.trim();
+  if (!value) return;
+  textEl.value = "";
+  sendMessage(value, value);
+});
+
+(async function start() {
+  const res = await fetch("/api/start", { method: "POST" });
+  renderTurn(await res.json());
+})();
+</script>
+</body>
+</html>

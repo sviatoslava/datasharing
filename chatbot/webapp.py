@@ -80,7 +80,13 @@ def create_app(model: str = DEFAULT_MODEL, base_url: str | None = None, llm=None
     def start():
         thread_id = str(uuid.uuid4())
         config = {"configurable": {"thread_id": thread_id}}
-        initial_state = {"messages": [], "options": [], "allow_free_text": True, "stage": WELCOME_STAGE}
+        initial_state = {
+            "messages": [],
+            "options": [],
+            "allow_free_text": True,
+            "stage": WELCOME_STAGE,
+            "active_node": "assistant",
+        }
         result = graph.invoke(initial_state, config=config)
         return _turn_response(thread_id, result)
 

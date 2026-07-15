@@ -8,6 +8,8 @@ from langgraph.graph.message import add_messages
 from langgraph.types import interrupt, Command
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
+from knowledge import retrieve
+
 DEFAULT_MODEL = "qwen2.5:1.5b"
 WELCOME_STAGE = "welcome"
 
@@ -21,6 +23,30 @@ asking for a name, a number, or open-ended detail), return an empty options list
 
 Respond with ONLY a single JSON object, no other text, in exactly this shape:
 {"reply": "<your conversational reply>", "options": ["option 1", "option 2"], "allow_free_text": true}
+"""
+
+PRODUCT_SYSTEM_PROMPT = """You are an unofficial, unaffiliated DEMO assistant that discusses \
+Halyk-Bank-style retail banking products.
+
+IMPORTANT: the reference material below is placeholder/sample content written for a coding \
+demo — it is NOT real, current data from Halyk Bank. Never state or imply these are Halyk \
+Bank's actual current rates, fees, or terms. Always remind the user to confirm real details \
+on the official Halyk Bank site or with a bank representative before making any financial \
+decision. You cannot access real accounts, move money, or perform any actual banking \
+transaction.
+
+Answer using ONLY the reference material below. If the answer isn't covered there, say you \
+don't have that information rather than guessing.
+
+After every reply, propose 2 to 4 short options for what the user might ask next, like \
+quick-reply buttons. Set allow_free_text to false only if the user must pick one of the \
+options; otherwise true.
+
+Respond with ONLY a single JSON object, no other text, in exactly this shape:
+{{"reply": "<your reply>", "options": ["option 1", "option 2"], "allow_free_text": true}}
+
+Reference material:
+{context}
 """
 
 
@@ -64,9 +90,20 @@ class StageMenu(BaseModel):
 
 PREDEFINED_MENUS: dict[str, StageMenu] = {
     WELCOME_STAGE: StageMenu(
-        reply="Hi! I'm a small local assistant. What would you like to do?",
+        reply=(
+            "Hi! I'm an unofficial demo assistant that can discuss Halyk Bank-style retail "
+            "banking products (cards, deposits, loans, mortgages). Heads up: this uses "
+            "placeholder demo content, not live data from Halyk Bank — always confirm real "
+            "details on the official site. What would you like to do?"
+        ),
         options=[
-            ChatOption(id="chat", label="Just chat", source="predefined"),
+            ChatOption(
+                id="products",
+                label="Ask about products & services",
+                source="predefined",
+                action="product_assistant",
+            ),
+            ChatOption(id="chat", label="Something else", source="predefined"),
             ChatOption(id="human", label="Talk to a human", source="predefined", action="handoff"),
         ],
     ),
@@ -81,23 +118,16 @@ class ChatState(TypedDict):
     options: list[dict]
     allow_free_text: bool
     stage: str | None
+    active_node: str  # which LLM-backed node produced the current turn; human()'s routing
+    # default when the picked option has no explicit `action`, so a conversation stays in
+    # whichever flow (assistant / product_assistant / ...) it's currently in.
 
 
 def build_graph(model: str = DEFAULT_MODEL, base_url: str | None = None, llm=None):
     llm = llm or ChatOllama(model=model, base_url=base_url, format="json", temperature=0.4)
 
-    def assistant(state: ChatState) -> ChatState:
-        stage = state.get("stage")
-        if stage and stage in PREDEFINED_MENUS:
-            menu = PREDEFINED_MENUS[stage]
-            return {
-                "messages": [AIMessage(content=menu.reply)],
-                "options": [o.model_dump() for o in menu.options],
-                "allow_free_text": True,
-                "stage": None,
-            }
-
-        messages = [SystemMessage(content=SYSTEM_PROMPT), *state["messages"]]
+    def _generate_turn(system_prompt: str, state: ChatState, active_node: str) -> ChatState:
+        messages = [SystemMessage(content=system_prompt), *state["messages"]]
         response = llm.invoke(messages)
         try:
             turn = AssistantTurn.model_validate_json(response.content)
@@ -113,7 +143,31 @@ def build_graph(model: str = DEFAULT_MODEL, base_url: str | None = None, llm=Non
             "options": [o.model_dump() for o in options],
             "allow_free_text": turn.allow_free_text or not options,
             "stage": None,
+            "active_node": active_node,
         }
+
+    def assistant(state: ChatState) -> ChatState:
+        stage = state.get("stage")
+        if stage and stage in PREDEFINED_MENUS:
+            menu = PREDEFINED_MENUS[stage]
+            return {
+                "messages": [AIMessage(content=menu.reply)],
+                "options": [o.model_dump() for o in menu.options],
+                "allow_free_text": True,
+                "stage": None,
+                "active_node": "assistant",
+            }
+
+        return _generate_turn(SYSTEM_PROMPT, state, active_node="assistant")
+
+    def product_assistant(state: ChatState) -> ChatState:
+        last_user_text = next(
+            (m.content for m in reversed(state["messages"]) if m.type == "human"), ""
+        )
+        chunks = retrieve(last_user_text)
+        context = "\n\n".join(f"### {c.title}\n{c.text}" for c in chunks)
+        system_prompt = PRODUCT_SYSTEM_PROMPT.format(context=context)
+        return _generate_turn(system_prompt, state, active_node="product_assistant")
 
     def human(state: ChatState) -> Command:
         options = state["options"]
@@ -136,7 +190,11 @@ def build_graph(model: str = DEFAULT_MODEL, base_url: str | None = None, llm=Non
             selected = next((o for o in options if o["id"] == text), None)
 
         resolved_text = (selected["value"] or selected["label"]) if selected else text
-        goto = selected["action"] if selected and selected["action"] else "assistant"
+        goto = (
+            selected["action"]
+            if selected and selected["action"]
+            else state.get("active_node", "assistant")
+        )
 
         return Command(goto=goto, update={"messages": [HumanMessage(content=resolved_text)]})
 
@@ -154,10 +212,12 @@ def build_graph(model: str = DEFAULT_MODEL, base_url: str | None = None, llm=Non
 
     graph = StateGraph(ChatState)
     graph.add_node("assistant", assistant)
+    graph.add_node("product_assistant", product_assistant)
     graph.add_node("human", human)
     graph.add_node("handoff", handoff)
     graph.add_edge(START, "assistant")
     graph.add_edge("assistant", "human")
+    graph.add_edge("product_assistant", "human")
     graph.add_edge("handoff", END)
 
     return graph

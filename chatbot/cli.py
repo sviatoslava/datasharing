@@ -31,7 +31,13 @@ def main() -> None:
     config = {"configurable": {"thread_id": "cli-session"}}
 
     print(f"Chatbot ready (model: {args.model}). Type 'exit' to quit.")
-    initial_state = {"messages": [], "options": [], "allow_free_text": True, "stage": WELCOME_STAGE}
+    initial_state = {
+        "messages": [],
+        "options": [],
+        "allow_free_text": True,
+        "stage": WELCOME_STAGE,
+        "active_node": "assistant",
+    }
     result = graph.invoke(initial_state, config=config)
 
     quitting = False

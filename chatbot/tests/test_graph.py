@@ -196,7 +196,7 @@ def test_product_assistant_tells_the_model_when_nothing_matches_instead_of_guess
     graph.invoke(initial_state, config=config)
     graph.invoke(Command(resume="products"), config=config)
 
-    graph.invoke(Command(resume="What's Halyk Bank's current CEO?"), config=config)
+    graph.invoke(Command(resume="What's the bank's current CEO?"), config=config)
 
     system_content = llm.calls[-1][0].content
     assert "Reference material:" in system_content
@@ -237,7 +237,7 @@ def test_fallback_curated_options_used_when_no_topic_matches():
     graph.invoke(initial_state, config=config)
     graph.invoke(Command(resume="products"), config=config)
 
-    result = graph.invoke(Command(resume="What's Halyk Bank's current CEO?"), config=config)
+    result = graph.invoke(Command(resume="What's the bank's current CEO?"), config=config)
 
     payload = result["__interrupt__"][0].value
     handoff_opt = next(o for o in payload["options"] if o["label"] == "Talk to a human")

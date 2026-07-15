@@ -1,8 +1,9 @@
 # Mortgages (Home Loans)
 
-> DEMO/PLACEHOLDER CONTENT — not real data from Halyk Bank. This file was written for a
-> coding demo (this sandbox could not reach halykbank.kz to source real content). For
-> actual current products, rates, and terms, visit the official Halyk Bank site or a branch.
+> DEMO/PLACEHOLDER CONTENT — not real data from any specific bank. This file was written
+> for a coding demo, modeled on typical retail banking products in general, not sourced
+> from a live bank website. For actual current products, rates, and terms, check with your
+> own bank directly.
 
 ## Standard Mortgage
 - A long-term secured loan for buying residential property, with the property serving as

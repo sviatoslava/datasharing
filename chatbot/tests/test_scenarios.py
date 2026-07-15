@@ -119,7 +119,7 @@ def test_out_of_scope_question():
     graph, config = _start(llm)
 
     graph.invoke(Command(resume="products"), config=config)
-    result = graph.invoke(Command(resume="What's Halyk Bank's current CEO?"), config=config)
+    result = graph.invoke(Command(resume="What's the bank's current CEO?"), config=config)
 
     system_content = llm.calls[-1][0].content
     assert "No matching reference material" in system_content

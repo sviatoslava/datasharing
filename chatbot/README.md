@@ -10,14 +10,14 @@ about retail banking products (cards, deposits, loans, mortgages, mobile banking
 small local knowledge base, retrieval-augmented into the model's prompt.
 
 > **⚠️ Important — read before using the product Q&A mode.** This started as a request to
-> build a Halyk Bank product chatbot sourced from halykbank.kz. The environment this was
-> built in could not reach that site (blocked by network policy) or any other live source,
-> so **`knowledge/*.md` is placeholder content I wrote by hand**, modeled on typical retail
-> banking products in general — it is **not real data scraped or sourced from Halyk Bank**,
-> and the bot is **not affiliated with or endorsed by Halyk Bank**. Every knowledge file and
-> the bot's own system prompt say so explicitly, and the bot is instructed to never claim its
-> answers are Halyk Bank's actual current rates, fees, or terms. Before using this for
-> anything beyond a demo: replace `knowledge/*.md` with real, sourced content (see
+> build a bank product chatbot sourced from a specific bank's site. The environment this was
+> built in could not reach any live source (blocked by network policy), so
+> **`knowledge/*.md` is placeholder content I wrote by hand**, modeled on typical retail
+> banking products in general — it is **not real data scraped or sourced from any specific
+> bank**, and the bot is **not affiliated with or endorsed by any bank**. Every knowledge
+> file and the bot's own system prompt say so explicitly, and the bot is instructed to never
+> claim its answers are a real bank's actual current rates, fees, or terms. Before using
+> this for anything beyond a demo: replace `knowledge/*.md` with real, sourced content (see
 > "Using real content" below), and keep the disclaimers — displaying fabricated financial
 > product details as if they were a real bank's could mislead users into bad financial
 > decisions.
@@ -107,7 +107,7 @@ python webapp.py --demo
   - `handoff` is a demo of an action-routed node: picking "Talk to a human" in the welcome
     menu jumps here directly, without ever calling the LLM.
 - `knowledge.py` + `knowledge/*.md`: the product knowledge base and its retrieval function
-  (see the disclaimer above — this is placeholder content, not sourced from Halyk Bank).
+  (see the disclaimer above — this is placeholder content, not sourced from any real bank).
 - `cli.py` / `webapp.py` drive the graph turn by turn using an `InMemorySaver` checkpointer,
   starting in the `"welcome"` stage.
 - Graph state (`ChatState.options`) stores plain dicts (`ChatOption.model_dump()`), not

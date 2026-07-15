@@ -26,14 +26,13 @@ Respond with ONLY a single JSON object, no other text, in exactly this shape:
 """
 
 PRODUCT_SYSTEM_PROMPT = """You are an unofficial, unaffiliated DEMO assistant that discusses \
-Halyk-Bank-style retail banking products.
+general retail banking products.
 
 IMPORTANT: the reference material below is placeholder/sample content written for a coding \
-demo — it is NOT real, current data from Halyk Bank. Never state or imply these are Halyk \
-Bank's actual current rates, fees, or terms. Always remind the user to confirm real details \
-on the official Halyk Bank site or with a bank representative before making any financial \
-decision. You cannot access real accounts, move money, or perform any actual banking \
-transaction.
+demo — it is NOT real, current data from any specific bank. Never state or imply these are \
+a real bank's actual current rates, fees, or terms. Always remind the user to confirm real \
+details with their own bank or a bank representative before making any financial decision. \
+You cannot access real accounts, move money, or perform any actual banking transaction.
 
 Answer using ONLY the reference material below. If the answer isn't covered there, say you \
 don't have that information rather than guessing.
@@ -97,10 +96,10 @@ class StageMenu(BaseModel):
 PREDEFINED_MENUS: dict[str, StageMenu] = {
     WELCOME_STAGE: StageMenu(
         reply=(
-            "Hi! I'm an unofficial demo assistant that can discuss Halyk Bank-style retail "
-            "banking products (cards, deposits, loans, mortgages). Heads up: this uses "
-            "placeholder demo content, not live data from Halyk Bank — always confirm real "
-            "details on the official site. What would you like to do?"
+            "Hi! I'm an unofficial demo assistant that can discuss general retail banking "
+            "products (cards, deposits, loans, mortgages). Heads up: this uses placeholder "
+            "demo content, not live data from any real bank — always confirm real details "
+            "with your own bank. What would you like to do?"
         ),
         default_active_node="product_assistant",
         options=[

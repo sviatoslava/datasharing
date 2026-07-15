@@ -36,7 +36,7 @@ def test_retrieve_returns_empty_for_genuinely_out_of_scope_query():
     chunks = load_chunks()
 
     # shares only generic/incidental words with the corpus, no real topical match
-    assert retrieve("What's Halyk Bank's current CEO?", chunks=chunks, k=3) == []
+    assert retrieve("What's the bank's current CEO?", chunks=chunks, k=3) == []
     assert retrieve("What's the weather today?", chunks=chunks, k=3) == []
 
 

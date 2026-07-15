@@ -8,17 +8,17 @@ Two scenarios below surfaced real bugs, which are now fixed; two more surfaced r
 *limitations* that are still open — see "Known limitations" at the end.
 
 All examples use the placeholder knowledge base (see the disclaimer in `README.md`) —
-content is representative, not real Halyk Bank data.
+content is representative, not real data from any specific bank.
 
 ---
 
 ### 1. Product inquiry — deposits & savings
 
 ```
-Bot:  Hi! I'm an unofficial demo assistant that can discuss Halyk Bank-style retail
-      banking products (cards, deposits, loans, mortgages). Heads up: this uses
-      placeholder demo content, not live data from Halyk Bank — always confirm real
-      details on the official site. What would you like to do?
+Bot:  Hi! I'm an unofficial demo assistant that can discuss general retail banking
+      products (cards, deposits, loans, mortgages). Heads up: this uses placeholder
+      demo content, not live data from any real bank — always confirm real details
+      with your own bank. What would you like to do?
       [Ask about products & services] [Something else] [Talk to a human]
 
 User: (clicks) Ask about products & services
@@ -103,7 +103,7 @@ else" explicitly switches to generic chat). Regression-tested by
 ### 6. Out-of-scope question
 
 ```
-User: (in product mode) What's Halyk Bank's current CEO?
+User: (in product mode) What's the bank's current CEO?
 Bot:  I don't have that information — I can help with cards, deposits, loans,
       mortgages, or mobile banking questions instead.
 ```

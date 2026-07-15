@@ -86,6 +86,12 @@ class AssistantTurn(BaseModel):
 class StageMenu(BaseModel):
     reply: str
     options: list[ChatOption] = Field(default_factory=list)
+    # Node a free-text reply (one that doesn't match any option) should fall through to.
+    # Defaults to "assistant" (generic chat), but the welcome menu overrides this to
+    # "product_assistant" since that's this bot's primary purpose — a user who ignores the
+    # buttons and just types a product question straight away should still get a
+    # retrieval-grounded answer, not a generic chit-chat reply.
+    default_active_node: str = "assistant"
 
 
 PREDEFINED_MENUS: dict[str, StageMenu] = {
@@ -96,6 +102,7 @@ PREDEFINED_MENUS: dict[str, StageMenu] = {
             "placeholder demo content, not live data from Halyk Bank — always confirm real "
             "details on the official site. What would you like to do?"
         ),
+        default_active_node="product_assistant",
         options=[
             ChatOption(
                 id="products",
@@ -155,7 +162,7 @@ def build_graph(model: str = DEFAULT_MODEL, base_url: str | None = None, llm=Non
                 "options": [o.model_dump() for o in menu.options],
                 "allow_free_text": True,
                 "stage": None,
-                "active_node": "assistant",
+                "active_node": menu.default_active_node,
             }
 
         return _generate_turn(SYSTEM_PROMPT, state, active_node="assistant")
@@ -165,7 +172,12 @@ def build_graph(model: str = DEFAULT_MODEL, base_url: str | None = None, llm=Non
             (m.content for m in reversed(state["messages"]) if m.type == "human"), ""
         )
         chunks = retrieve(last_user_text)
-        context = "\n\n".join(f"### {c.title}\n{c.text}" for c in chunks)
+        context = (
+            "\n\n".join(f"### {c.title}\n{c.text}" for c in chunks)
+            if chunks
+            else "(No matching reference material found for this question — say so rather "
+            "than guessing, and suggest the product categories you *can* help with.)"
+        )
         system_prompt = PRODUCT_SYSTEM_PROMPT.format(context=context)
         return _generate_turn(system_prompt, state, active_node="product_assistant")
 

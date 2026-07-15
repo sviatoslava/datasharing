@@ -83,11 +83,13 @@ python webapp.py --demo
     against the `AssistantTurn` Pydantic schema (deduping/trimming options, falling back to
     raw text if parsing fails).
   - `product_assistant` is the same pattern, but first retrieves the top matching chunks
-    from the local `knowledge/` files (via `knowledge.retrieve`, a dependency-free
-    keyword/TF-IDF scorer — no embedding model or vector DB needed for a handful of short
-    documents) and injects them into a system prompt (`PRODUCT_SYSTEM_PROMPT`) that
-    instructs the model to answer *only* from that reference material and to repeat the
-    demo/placeholder disclaimer.
+    from the local `knowledge/` files (via `knowledge.retrieve`, a dependency-free TF-IDF
+    scorer with stopword filtering, light plural stemming, and a title-match boost — no
+    embedding model or vector DB needed for a handful of short documents) and injects them
+    into a system prompt (`PRODUCT_SYSTEM_PROMPT`) that instructs the model to answer *only*
+    from that reference material and to repeat the demo/placeholder disclaimer. If nothing
+    scores above a confidence floor, `retrieve()` returns `[]` and the prompt says so
+    explicitly, rather than grounding the model in an arbitrary/unrelated chunk.
   - `human` pauses the graph with `interrupt()`, handing control back to the caller. When
     resumed, numeric input or an option's `id` is mapped back to the matching option; each
     option (`ChatOption`) carries an `id`, `label`, `value` (defaults to `label`), `source`
@@ -122,6 +124,13 @@ To replace the placeholder knowledge base with real, sourced product information
 3. `knowledge.retrieve()` and `product_assistant` need no code changes — they just index
    whatever `.md` files are in `knowledge/`.
 
+## Common conversation scenarios
+
+See **[`SCENARIOS.md`](./SCENARIOS.md)** for example transcripts of the most common ways
+someone would actually use this bot (product inquiries per category, straight-to-the-point
+free text, out-of-scope questions, human handoff, exit) — each backed by an executable test,
+plus two documented known limitations that aren't fixed yet.
+
 ## Tests
 
 Tests use a `FakeLLM` stand-in (see `tests/test_graph.py`), so they don't require a running
@@ -132,13 +141,15 @@ pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
 
-Covers: the predefined welcome menu (no LLM call), `action`-based routing to `handoff` and to
-`product_assistant`, falling through to the LLM for non-action options, option
-deduping/capping, the malformed-JSON fallback path, numeric-to-value and id-to-value
-resolution, free-text passthrough, `exit`, that a product question actually retrieves and
-injects the matching knowledge chunk into the prompt (`test_graph.py`), and that retrieval
-itself ranks the right topic for a query / falls back sanely on no keyword match
-(`test_knowledge.py`).
+- `test_graph.py` — individual mechanisms in isolation: the predefined welcome menu (no LLM
+  call), `action`-based routing to `handoff` and to `product_assistant`, falling through to
+  the LLM for non-action options, option deduping/capping, the malformed-JSON fallback path,
+  numeric-to-value and id-to-value resolution, free-text passthrough, `exit`, and that a
+  product question retrieves and injects the matching knowledge chunk into the prompt.
+- `test_knowledge.py` — retrieval quality: ranks the right topic per query, disambiguates
+  similar topics, returns `[]` (not a stray chunk) when nothing confidently matches.
+- `test_scenarios.py` — full multi-turn scenarios matching `SCENARIOS.md`, run end-to-end
+  against the real graph.
 
 Both `cli.py` and `webapp.py` need a real Ollama server + pulled model to talk to an actual
 Qwen model (`webapp.py --demo` and the pytest suite don't — they use stand-ins). Note

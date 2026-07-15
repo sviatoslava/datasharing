@@ -135,6 +135,20 @@ def test_free_text_input_passes_through_unchanged():
     assert "tell me a story" in human_messages
 
 
+def test_free_text_from_welcome_routes_to_product_assistant_not_generic_chat():
+    # A user who ignores the welcome buttons and just types a product question straight
+    # away should still land in the grounded product_assistant flow, not generic chit-chat.
+    llm = FakeLLM(['{"reply": "Rates vary by term.", "options": [], "allow_free_text": true}'])
+    graph, config, initial_state, _ = make_app(llm=llm)
+    graph.invoke(initial_state, config=config)
+
+    graph.invoke(Command(resume="What are your mortgage rates?"), config=config)
+
+    system_content = llm.calls[-1][0].content
+    assert "Reference material:" in system_content
+    assert "Mortgages" in system_content
+
+
 def test_exit_ends_conversation_without_extra_message():
     graph, config, initial_state, _ = make_app(responses=[])
     graph.invoke(initial_state, config=config)
@@ -171,19 +185,21 @@ def test_product_assistant_injects_retrieved_context_and_persists_the_flow():
     assert len(llm.calls) == 3
 
 
-def test_product_assistant_falls_back_to_a_chunk_when_query_has_no_keyword_match():
+def test_product_assistant_tells_the_model_when_nothing_matches_instead_of_guessing():
     llm = FakeLLM(
         [
             '{"reply": "Sure, ask away!", "options": [], "allow_free_text": true}',
-            '{"reply": "Hmm, not sure.", "options": [], "allow_free_text": true}',
+            '{"reply": "I don\'t have that information.", "options": [], "allow_free_text": true}',
         ]
     )
     graph, config, initial_state, _ = make_app(llm=llm)
     graph.invoke(initial_state, config=config)
     graph.invoke(Command(resume="products"), config=config)
 
-    graph.invoke(Command(resume="asdkjaslkdj nonsense query"), config=config)
+    graph.invoke(Command(resume="What's Halyk Bank's current CEO?"), config=config)
 
     system_content = llm.calls[-1][0].content
     assert "Reference material:" in system_content
-    assert "###" in system_content  # some chunk was still included, not an empty context
+    # no chunk matched — the prompt should say so explicitly rather than injecting a stray one
+    assert "No matching reference material" in system_content
+    assert "###" not in system_content

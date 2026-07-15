@@ -24,12 +24,20 @@ def test_retrieve_disambiguates_similar_topics():
     assert retrieve("personal loan for a renovation", chunks=chunks, k=1)[0].title == "Loans"
 
 
-def test_retrieve_falls_back_to_a_chunk_on_no_keyword_overlap():
+def test_retrieve_returns_empty_on_no_keyword_overlap():
     chunks = [Chunk(title="Only Topic", text="banana banana banana")]
 
     result = retrieve("completely unrelated gibberish query", chunks=chunks, k=3)
 
-    assert result == [chunks[0]]
+    assert result == []
+
+
+def test_retrieve_returns_empty_for_genuinely_out_of_scope_query():
+    chunks = load_chunks()
+
+    # shares only generic/incidental words with the corpus, no real topical match
+    assert retrieve("What's Halyk Bank's current CEO?", chunks=chunks, k=3) == []
+    assert retrieve("What's the weather today?", chunks=chunks, k=3) == []
 
 
 def test_retrieve_returns_empty_list_for_empty_corpus():

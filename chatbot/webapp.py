@@ -17,6 +17,7 @@ from types import SimpleNamespace
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
+from langchain_ollama import OllamaEmbeddings
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 from pydantic import BaseModel
@@ -68,9 +69,11 @@ def _turn_response(thread_id: str, result: dict) -> dict:
     return {"thread_id": thread_id, "done": True, "reply": reply, "options": [], "allow_free_text": True}
 
 
-def create_app(model: str = DEFAULT_MODEL, base_url: str | None = None, llm=None) -> FastAPI:
+def create_app(model: str = DEFAULT_MODEL, base_url: str | None = None, llm=None, embedder=None) -> FastAPI:
     app = FastAPI()
-    graph = build_graph(model=model, base_url=base_url, llm=llm).compile(checkpointer=InMemorySaver())
+    graph = build_graph(model=model, base_url=base_url, llm=llm, embedder=embedder).compile(
+        checkpointer=InMemorySaver()
+    )
 
     @app.get("/")
     def index():
@@ -105,12 +108,25 @@ def main() -> None:
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Ollama model tag to use")
     parser.add_argument("--base-url", default=None, help="Ollama server URL (defaults to http://localhost:11434)")
     parser.add_argument("--demo", action="store_true", help="Use a canned local stand-in instead of Ollama")
+    parser.add_argument(
+        "--embedding-model",
+        default=None,
+        help="Ollama embedding model (e.g. nomic-embed-text) for semantic retrieval instead "
+        "of the default TF-IDF matcher. UNVERIFIED against a real model — see build_graph()'s "
+        "docstring in graph.py and knowledge.py's 'Optional semantic retrieval' section before "
+        "relying on this; the ambiguous-match clarification flow is disabled in this mode.",
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
 
     llm = DemoLLM() if args.demo else None
-    app = create_app(model=args.model, base_url=args.base_url, llm=llm)
+    embedder = (
+        OllamaEmbeddings(model=args.embedding_model, base_url=args.base_url)
+        if args.embedding_model
+        else None
+    )
+    app = create_app(model=args.model, base_url=args.base_url, llm=llm, embedder=embedder)
     uvicorn.run(app, host=args.host, port=args.port)
 
 

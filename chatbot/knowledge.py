@@ -146,8 +146,78 @@ def retrieve(query: str, chunks: list[Chunk] | None = None, k: int = 3) -> list[
 def is_ambiguous(scored: list[tuple[Chunk, float]]) -> bool:
     """True when the top two scored candidates (from retrieve_scored) are too close together
     to confidently pick one — the caller should ask the user to disambiguate instead of
-    guessing or silently blending both into one answer."""
+    guessing or silently blending both into one answer.
+
+    NOTE: _AMBIGUITY_RATIO was calibrated against retrieve_scored()'s TF-IDF score
+    distribution specifically. It has NOT been validated against retrieve_semantic()'s cosine
+    similarity scores, which cluster very differently (unrelated documents from the same
+    embedding model often still score 0.3-0.5+) — don't feed semantic scores into this
+    function without recalibrating the threshold first."""
     if len(scored) < 2:
         return False
     top_score, second_score = scored[0][1], scored[1][1]
     return second_score > 0 and (top_score / second_score) < _AMBIGUITY_RATIO
+
+
+# --- Optional semantic retrieval -------------------------------------------------------
+#
+# Opt-in alternative to the TF-IDF scorer above, using a real embedding model (e.g. Ollama's
+# nomic-embed-text via langchain_ollama.OllamaEmbeddings) for cosine-similarity matching
+# instead of keyword overlap — catches paraphrases that share no common words (e.g. "monthly
+# cost" ~ "fee"), which TF-IDF fundamentally cannot.
+#
+# CAVEAT: this sandbox has no network access to Ollama, so this code is unit-tested against a
+# fake embedder (proving the cosine-similarity math, caching, and ranking are correct) but has
+# NOT been integration-tested against a real embedding model. _MIN_SEMANTIC_SCORE below is an
+# unverified starting point (0.5 is a commonly-cited rough threshold for "relevant" with many
+# sentence-embedding models) — treat it as something to tune against your own model and
+# knowledge base, not a calibrated constant like _MIN_SCORE/_AMBIGUITY_RATIO above.
+
+_MIN_SEMANTIC_SCORE = 0.5  # UNVERIFIED — tune against your embedding model before relying on it
+
+_embedding_cache: dict[tuple[int, str], list[float]] = {}
+
+
+def _embed_cached(embedder, text: str) -> list[float]:
+    # Keyed by embedder identity + text: the knowledge base is static within a process, so
+    # re-embedding the same 5 documents on every single user turn would be a wasted network
+    # round-trip each time. Query text isn't cached (always distinct per turn) but chunk text
+    # is, which is where the real savings are.
+    key = (id(embedder), text)
+    if key not in _embedding_cache:
+        _embedding_cache[key] = embedder.embed_query(text)
+    return _embedding_cache[key]
+
+
+def _cosine_similarity(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(x * x for x in b))
+    return dot / (norm_a * norm_b) if norm_a and norm_b else 0.0
+
+
+def retrieve_semantic(
+    query: str,
+    embedder,
+    chunks: list[Chunk] | None = None,
+    k: int = 3,
+    min_score: float = _MIN_SEMANTIC_SCORE,
+) -> list[tuple[Chunk, float]]:
+    """Like retrieve_scored(), but via embedding cosine similarity instead of TF-IDF.
+
+    `embedder` is anything exposing `.embed_query(text) -> list[float]` — e.g. a
+    langchain_core.embeddings.Embeddings instance such as OllamaEmbeddings(model=...), or (for
+    tests) a stand-in exposing the same method. See the module-level caveat above: min_score
+    is unverified against any real model."""
+    chunks = load_chunks() if chunks is None else chunks
+    if not chunks:
+        return []
+
+    query_vec = _embed_cached(embedder, query)
+    scored = [
+        (chunk, _cosine_similarity(query_vec, _embed_cached(embedder, f"{chunk.title}\n{chunk.text}")))
+        for chunk in chunks
+    ]
+    scored.sort(key=lambda pair: pair[1], reverse=True)
+
+    return [(chunk, score) for chunk, score in scored[:k] if score >= min_score]

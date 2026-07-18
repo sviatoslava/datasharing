@@ -1,5 +1,21 @@
 """Tests for the pure-Python keyword retrieval over the product knowledge base."""
-from knowledge import Chunk, is_ambiguous, load_chunks, retrieve, retrieve_scored
+from knowledge import Chunk, is_ambiguous, load_chunks, retrieve, retrieve_scored, retrieve_semantic
+
+
+class FakeEmbedder:
+    """Deterministic bag-of-words embedder for testing retrieve_semantic() without a real
+    model: shared vocabulary words become shared vector dimensions, so cosine similarity
+    behaves predictably. Counts calls so tests can verify the embedding cache works."""
+
+    _VOCAB = ["loan", "mortgage", "cat", "card", "deposit"]
+
+    def __init__(self):
+        self.calls = 0
+
+    def embed_query(self, text: str) -> list[float]:
+        self.calls += 1
+        words = text.lower().split()
+        return [float(words.count(w)) for w in self._VOCAB]
 
 
 def test_load_chunks_finds_all_knowledge_files():
@@ -87,3 +103,39 @@ def test_is_ambiguous_false_with_fewer_than_two_candidates():
     a = Chunk(title="A", text="a")
     assert is_ambiguous([]) is False
     assert is_ambiguous([(a, 0.1)]) is False
+
+
+def test_retrieve_semantic_ranks_by_cosine_similarity():
+    embedder = FakeEmbedder()
+    chunks = [Chunk(title="Loans", text="loan loan loan"), Chunk(title="Pets", text="cat cat cat")]
+
+    result = retrieve_semantic("loan", embedder, chunks=chunks, k=2, min_score=0.01)
+
+    assert result[0][0].title == "Loans"
+
+
+def test_retrieve_semantic_filters_below_min_score():
+    embedder = FakeEmbedder()
+    chunks = [Chunk(title="Pets", text="cat cat cat")]  # zero vocabulary overlap with "loan"
+
+    result = retrieve_semantic("loan", embedder, chunks=chunks, min_score=0.01)
+
+    assert result == []
+
+
+def test_retrieve_semantic_returns_empty_for_empty_corpus():
+    assert retrieve_semantic("anything", FakeEmbedder(), chunks=[], k=3) == []
+
+
+def test_retrieve_semantic_caches_embeddings_across_calls():
+    embedder = FakeEmbedder()
+    chunks = [Chunk(title="Loans", text="loan loan loan")]
+
+    retrieve_semantic("loan", embedder, chunks=chunks, min_score=0.0)
+    calls_after_first = embedder.calls
+    assert calls_after_first > 0
+
+    retrieve_semantic("loan", embedder, chunks=chunks, min_score=0.0)
+
+    # same embedder, same query text, same chunk text — both should hit cache, no new calls
+    assert embedder.calls == calls_after_first

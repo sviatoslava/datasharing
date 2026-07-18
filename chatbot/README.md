@@ -46,6 +46,7 @@ Options:
 
 ```bash
 python cli.py --model qwen2.5:3b --base-url http://localhost:11434
+python cli.py --embedding-model nomic-embed-text   # semantic retrieval — see "Semantic retrieval" below
 ```
 
 Type `exit` or `quit` to end the conversation.
@@ -88,11 +89,17 @@ python webapp.py --demo
     title-match boost — no embedding model or vector DB needed for a handful of short
     documents) and injects them into a system prompt (`PRODUCT_SYSTEM_PROMPT`) that instructs
     the model to answer *only* from that reference material and to repeat the demo/placeholder
-    disclaimer. If nothing scores above a confidence floor, retrieval returns `[]` and the
+    disclaimer. The retrieval query is built from the last `_RETRIEVAL_CONTEXT_TURNS` (2) human
+    messages, not just the latest one, so a short follow-up ("and the rewards program?") stays
+    anchored to the topic raised a turn earlier instead of retrieving on its own with no
+    context — predefined menu-click labels ("Ask about products & services") are excluded from
+    this window since they're navigation, not content, and would otherwise pollute it with
+    generic words. If nothing scores above a confidence floor, retrieval returns `[]` and the
     prompt says so explicitly, rather than grounding the model in an arbitrary/unrelated
     chunk. If the top two matches are too close to call (`knowledge.is_ambiguous`, ratio-based
     — see "Clarification questions" below), it asks which topic the user means instead of
-    guessing or blending both into one answer.
+    guessing or blending both into one answer. An optional `embedder` (see "Semantic
+    retrieval" below) swaps this whole scoring step for embedding cosine similarity instead.
     After the model replies, its **options are overridden by curated ones** from
     `knowledge/options.json` when the matched topic (or `"fallback"`, for no match) has an
     entry there — more reliable than trusting a small model to invent a good menu every
@@ -155,6 +162,35 @@ This is fully deterministic — no LLM call is spent on the clarification turn i
 
 This only fires for genuinely close ties — see `test_no_false_positive_ambiguity_on_the_real_corpus`
 in `tests/test_knowledge.py` for the specific queries it was checked against.
+
+## Semantic retrieval
+
+> **⚠️ Unverified.** This sandbox has no network access to Ollama, so `retrieve_semantic()`
+> is unit-tested against a fake embedder (proving the cosine-similarity math, caching, and
+> ranking are correct — see `tests/test_knowledge.py`) but has **not** been
+> integration-tested against a real embedding model. Tune `knowledge._MIN_SEMANTIC_SCORE`
+> against your own model and knowledge base before relying on this in production.
+
+TF-IDF only matches shared words — it can't tell that "monthly cost" and "fee" mean the same
+thing. Passing `--embedding-model nomic-embed-text` (or any Ollama embedding model) switches
+`product_assistant` to `knowledge.retrieve_semantic()`, which ranks knowledge chunks by
+embedding cosine similarity instead:
+
+```bash
+python cli.py --embedding-model nomic-embed-text
+python webapp.py --embedding-model nomic-embed-text
+```
+
+Chunk embeddings are cached per process (`knowledge._embed_cached`) so the static knowledge
+base is only embedded once, not re-embedded on every user turn.
+
+**The clarification-questions flow (above) is disabled entirely in semantic mode.**
+`is_ambiguous()`'s 1.4x ratio was calibrated against TF-IDF's score distribution specifically;
+cosine similarity clusters very differently (unrelated documents from the same embedding
+model often still score 0.3-0.5+), so applying that threshold unchanged would likely either
+never fire or fire constantly depending on the model — worse than not having the feature.
+Combining semantic retrieval with a properly recalibrated clarification flow is a natural
+next step once the confidence floor has been tuned against a real model.
 
 ## Using real content
 

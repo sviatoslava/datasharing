@@ -8,7 +8,7 @@ from langgraph.graph.message import add_messages
 from langgraph.types import interrupt, Command
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
-from knowledge import Chunk, get_chunk, is_ambiguous, load_recommended_options, retrieve_scored
+from knowledge import Chunk, get_chunk, is_ambiguous, load_recommended_options, retrieve_scored, retrieve_semantic
 
 DEFAULT_MODEL = "qwen2.5:1.5b"
 WELCOME_STAGE = "welcome"
@@ -135,7 +135,36 @@ class ChatState(TypedDict):
     # (reset to None) by product_assistant on the very next turn — see ChatOption.topic_key.
 
 
-def build_graph(model: str = DEFAULT_MODEL, base_url: str | None = None, llm=None):
+# How many of the most recent human turns to fold into the retrieval query, so a short
+# follow-up ("and the rewards program?") stays anchored to the topic raised a turn or two
+# earlier instead of retrieving on its own with no context and (previously) finding nothing.
+_RETRIEVAL_CONTEXT_TURNS = 2
+
+# Predefined menu labels (e.g. "Ask about products & services") are navigation, not content —
+# folding them into the retrieval query pollutes it with generic words ("products", "services")
+# that incidentally clear the confidence floor across several topics, which previously turned
+# a genuinely out-of-scope follow-up into a false "ambiguous" clarification. Excluded from the
+# context window; a real follow-up (a curated option, or a clarification topic pick) still
+# contributes since its text is substantive.
+_NAVIGATION_PHRASES = {opt.label for menu in PREDEFINED_MENUS.values() for opt in menu.options}
+
+
+def _retrieval_query(messages: list) -> str:
+    human_texts = [
+        m.content for m in messages if m.type == "human" and m.content not in _NAVIGATION_PHRASES
+    ]
+    return " ".join(human_texts[-_RETRIEVAL_CONTEXT_TURNS:])
+
+
+def build_graph(model: str = DEFAULT_MODEL, base_url: str | None = None, llm=None, embedder=None):
+    """embedder: optional — anything exposing `.embed_query(text) -> list[float]` (e.g.
+    langchain_ollama.OllamaEmbeddings). When set, product_assistant grounds on
+    knowledge.retrieve_semantic() (cosine similarity) instead of the default TF-IDF
+    retrieve_scored(). NOTE: the ambiguous-match clarification flow (knowledge.is_ambiguous)
+    is calibrated for TF-IDF score distributions only and is skipped entirely in semantic
+    mode — see knowledge.py's "Optional semantic retrieval" section for why, and tune
+    knowledge._MIN_SEMANTIC_SCORE for your embedding model before relying on this in
+    production; it hasn't been integration-tested against a real model."""
     llm = llm or ChatOllama(model=model, base_url=base_url, format="json", temperature=0.4)
 
     def _generate_turn(system_prompt: str, state: ChatState, active_node: str) -> ChatState:
@@ -199,16 +228,24 @@ def build_graph(model: str = DEFAULT_MODEL, base_url: str | None = None, llm=Non
         }
 
     def product_assistant(state: ChatState) -> ChatState:
-        last_user_text = next(
-            (m.content for m in reversed(state["messages"]) if m.type == "human"), ""
-        )
+        retrieval_query = _retrieval_query(state["messages"])
 
         forced_topic = state.get("forced_topic")
         if forced_topic:
             forced_chunk = get_chunk(forced_topic)
-            chunks = [forced_chunk] if forced_chunk else [c for c, _ in retrieve_scored(last_user_text)]
+            if forced_chunk:
+                chunks = [forced_chunk]
+            elif embedder is not None:
+                chunks = [c for c, _ in retrieve_semantic(retrieval_query, embedder)]
+            else:
+                chunks = [c for c, _ in retrieve_scored(retrieval_query)]
+        elif embedder is not None:
+            # Semantic mode skips the clarification flow entirely — is_ambiguous()'s ratio was
+            # calibrated for TF-IDF score distributions, not cosine similarity, and applying it
+            # unchanged risks either never firing or firing constantly depending on the model.
+            chunks = [c for c, _ in retrieve_semantic(retrieval_query, embedder)]
         else:
-            scored = retrieve_scored(last_user_text)
+            scored = retrieve_scored(retrieval_query)
             if is_ambiguous(scored):
                 return _clarify_turn([c for c, _ in scored])
             chunks = [c for c, _ in scored]

@@ -185,6 +185,53 @@ def test_product_assistant_injects_retrieved_context_and_persists_the_flow():
     assert len(llm.calls) == 3
 
 
+def test_short_follow_up_stays_grounded_via_recent_conversation_context():
+    llm = FakeLLM(
+        [
+            '{"reply": "Sure, ask away!", "options": [], "allow_free_text": true}',
+            '{"reply": "Cashback is available.", "options": [], "allow_free_text": true}',
+            '{"reply": "Fees vary by card.", "options": [], "allow_free_text": true}',
+        ]
+    )
+    graph, config, initial_state, _ = make_app(llm=llm)
+    graph.invoke(initial_state, config=config)
+    graph.invoke(Command(resume="products"), config=config)
+    graph.invoke(Command(resume="Tell me about credit card rewards"), config=config)
+
+    # "and fees?" alone wouldn't retrieve anything on its own (verified via knowledge.retrieve),
+    # but should stay grounded in Cards via the last couple of human turns.
+    graph.invoke(Command(resume="and fees?"), config=config)
+
+    system_content = llm.calls[-1][0].content
+    assert "Reference material:" in system_content
+    assert "### Cards" in system_content
+    assert "No matching reference material" not in system_content
+
+
+def test_navigation_click_text_is_excluded_from_retrieval_context():
+    # Regression: "Ask about products & services" (the welcome menu's own label) used to get
+    # folded into the retrieval query for the very next turn, and its generic words ("products",
+    # "services") incidentally cleared the confidence floor for several topics — turning a
+    # genuinely out-of-scope question into a false "ambiguous" clarification instead of the
+    # correct "no matching reference material" response.
+    llm = FakeLLM(
+        [
+            '{"reply": "Sure, ask away!", "options": [], "allow_free_text": true}',
+            '{"reply": "I do not have that information.", "options": [], "allow_free_text": true}',
+        ]
+    )
+    graph, config, initial_state, _ = make_app(llm=llm)
+    graph.invoke(initial_state, config=config)
+    graph.invoke(Command(resume="products"), config=config)
+
+    result = graph.invoke(Command(resume="What's the bank's current CEO?"), config=config)
+
+    system_content = llm.calls[-1][0].content
+    assert "No matching reference material" in system_content
+    payload = result["__interrupt__"][0].value
+    assert payload["reply"] == "I do not have that information."
+
+
 def test_product_assistant_tells_the_model_when_nothing_matches_instead_of_guessing():
     llm = FakeLLM(
         [
@@ -335,3 +382,28 @@ def test_picking_a_clarification_option_forces_that_exact_topic():
         assert "Deposits & Savings" not in system_content
     finally:
         graph_module.retrieve_scored = original
+
+
+def test_product_assistant_uses_semantic_retrieval_when_embedder_provided():
+    from tests.test_knowledge import FakeEmbedder
+
+    embedder = FakeEmbedder()
+    llm = FakeLLM(['{"reply": "grounded via semantic retrieval", "options": [], "allow_free_text": true}'])
+    graph = build_graph(llm=llm, embedder=embedder).compile(checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": "semantic"}}
+    initial_state = {
+        "messages": [],
+        "options": [],
+        "allow_free_text": True,
+        "stage": WELCOME_STAGE,
+        "active_node": "assistant",
+        "forced_topic": None,
+    }
+    graph.invoke(initial_state, config=config)
+
+    graph.invoke(Command(resume="tell me about a loan"), config=config)
+
+    # the semantic path (not TF-IDF) was actually exercised
+    assert embedder.calls > 0
+    system_content = llm.calls[-1][0].content
+    assert "Reference material:" in system_content

@@ -4,9 +4,10 @@ Example transcripts for the most common ways someone would actually use this bot
 by thinking through realistic user behavior and then **verifying each one against the real
 code** (not just plausible-sounding fiction) — either via the executable scenario tests in
 `tests/test_scenarios.py`, or via a direct trace against `graph.py`/`knowledge.py` where noted.
-Two scenarios below surfaced real bugs, which are now fixed; two more surfaced real
-*limitations* that are still open — see "Known limitations" at the end. Scenario 9
-(ambiguous questions) started as a limitation itself, until a proper fix was built for it.
+Several scenarios below surfaced real bugs or limitations along the way — scenarios 9-11
+(ambiguous questions, short follow-ups, misspellings) all started as limitations until a
+proper fix was built for each. One limitation is still open — see "Known limitations" at
+the end.
 
 All examples use the placeholder knowledge base (see the disclaimer in `README.md`) —
 content is representative, not real data from any specific bank.
@@ -168,28 +169,60 @@ and `test_graph.py::test_picking_a_clarification_option_forces_that_exact_topic`
 
 ---
 
-## Known limitations (not yet fixed — flagging rather than silently shipping)
-
-### A. Short follow-ups can lose the topic
-
-Retrieval only looks at the user's latest message, not the conversation so far. A natural
-follow-up like:
+### 10. Short follow-up stays on topic
 
 ```
-User: Tell me about credit card fees
+User: (in product mode) Tell me about credit card fees
 Bot:  [grounded in Cards]
 User: and the rewards program?
-Bot:  [retrieve("and the rewards program?") -> [] — no confident match, even though a
-      human would obviously read this as still being about cards]
+Bot:  [still grounded in Cards, not "no matching reference material"]
 ```
+**This started as a known limitation**: retrieval only looked at the user's latest message,
+so "and the rewards program?" alone returned `[]` even right after a clearly on-topic first
+turn (verified directly: `retrieve("and fees?")` and `retrieve("how do I apply?")` both
+returned `[]` in isolation). Fixed by building the retrieval query from the last 2 human
+turns instead of just the latest one. Building this surfaced a real regression along the
+way — the welcome menu's own button-click text ("Ask about products & services") was
+getting folded into that window too, and its generic words spuriously cleared the
+confidence floor for several topics, turning a genuinely out-of-scope follow-up into a
+false ambiguity trigger. Fixed by excluding predefined menu labels from the context window.
+Covered by `test_graph.py::test_short_follow_up_stays_grounded_via_recent_conversation_context`
+and `test_graph.py::test_navigation_click_text_is_excluded_from_retrieval_context`.
 
-Verified directly: `retrieve("and fees?")` and `retrieve("how do I apply?")` both return
-`[]` in isolation, even right after a clearly on-topic first turn. A fix would mean
-building the retrieval query from recent conversation context (e.g. the last user message
-plus the current `active_node`'s topic, or the last couple of turns) rather than the
-latest message alone.
+---
 
-### B. No way to reach a human mid-conversation
+### 11. Misspelled question
+
+```
+User: (from welcome, free text) What's the morgage rate for a house?
+Bot:  [grounded in Mortgages — same as if "mortgage" had been spelled correctly]
+```
+Retrieval is exact-token matching underneath (TF-IDF and, separately, embedding cosine
+similarity), so a single misspelled topic-anchor word used to return `[]` — verified: 6 of 7
+tested typo queries ("morgage rate", "intrest rate", "savngs acount", "personl loan",
+"creditt card fes", "mortage rate") retrieved *nothing*, while their correctly-spelled
+equivalents retrieved the right topic every time. When that happened, the bot told the user
+it didn't have information on a topic it actually has a full knowledge file for — actively
+misleading, not just an unanswered question.
+
+Fixed with `knowledge._correct_spelling()`: query words not found in the knowledge base's
+own vocabulary get nudged toward the closest word that *is* actually in the corpus (via
+stdlib `difflib`, cutoff calibrated against real typos vs. real unrelated same-length words
+— see `tests/test_knowledge.py`), before tokenization/embedding. Deliberately narrow: it can
+only "correct" toward a word this knowledge base actually uses, never toward some generic
+dictionary word, so it can't steer a genuinely out-of-scope question toward an unrelated
+topic. Verified all 6 previously-broken typo queries now retrieve identically to their
+correctly-spelled equivalents, and that correctly-spelled and out-of-scope queries are left
+completely untouched (no false corrections).
+Covered by `test_knowledge.py::test_retrieve_tolerates_common_spelling_mistakes`,
+`test_correct_spelling_leaves_correctly_spelled_queries_unchanged`, and
+`test_correct_spelling_does_not_false_correct_short_or_unrelated_words`.
+
+---
+
+## Known limitations (not yet fixed — flagging rather than silently shipping)
+
+### A. No way to reach a human mid-conversation
 
 "Talk to a human" only exists as a predefined option on the welcome menu (`action:
 "handoff"`). Once inside `product_assistant`, model-generated options never carry an
@@ -201,4 +234,4 @@ human" when it detects that intent, with code mapping that specific label to
 `action="handoff"` post-hoc, or (b) a lightweight intent check on every free-text turn
 before it reaches the LLM.
 
-Want me to implement a fix for either of these?
+Want me to implement a fix for this one too?

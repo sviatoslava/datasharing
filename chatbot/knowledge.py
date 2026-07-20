@@ -4,6 +4,7 @@ Pure-Python TF-IDF scoring — no embedding model or vector DB — since the cor
 handful of short reference documents. This also keeps retrieval fully testable without a
 running LLM.
 """
+import difflib
 import json
 import math
 import re
@@ -40,6 +41,41 @@ def _stem(token: str) -> str:
 def _tokenize(text: str) -> list[str]:
     words = _WORD_RE.findall(text.lower())
     return [_stem(t) for t in words if t not in _STOPWORDS and len(t) > 1]
+
+
+# TF-IDF/cosine matching are both exact-token matching underneath — a single misspelled word
+# ("morgage" for "mortgage") produces a token that appears nowhere in the corpus, contributing
+# zero signal. If that word was the query's only topic-anchor, retrieval finds nothing at all,
+# even though a human reads the question just fine. _correct_spelling fixes this by nudging
+# query words toward the *closest word actually in this knowledge base* — not a generic
+# dictionary, so it only ever "corrects" toward something meaningfully present here.
+#
+# Calibrated against real typos vs. real near-miss word pairs (see tests/test_knowledge.py):
+# genuine typos of words 4+ chars score a difflib ratio of ~0.85-0.93 ("morgage"~"mortgage"
+# 0.93, "fes"~"fees" 0.86), while unrelated same-length words (e.g. "rate"~"rare", "loan"~
+# "loam") tie right at 0.75 — so 0.84 catches real typos without those false positives. Words
+# of 2 chars or fewer are skipped entirely (too short for the ratio to mean anything).
+_SPELL_CORRECTION_CUTOFF = 0.84
+
+
+def _build_vocabulary(chunks: list) -> set[str]:
+    vocabulary: set[str] = set()
+    for chunk in chunks:
+        vocabulary.update(_WORD_RE.findall((chunk.title + " " + chunk.text).lower()))
+    return vocabulary
+
+
+def _correct_spelling(query: str, vocabulary: set[str]) -> str:
+    corrected_words = []
+    for raw_word in query.split():
+        bare_matches = _WORD_RE.findall(raw_word.lower())
+        word = bare_matches[0] if bare_matches else ""
+        if not word or len(word) <= 2 or word in _STOPWORDS or word in vocabulary:
+            corrected_words.append(raw_word)
+            continue
+        match = difflib.get_close_matches(word, vocabulary, n=1, cutoff=_SPELL_CORRECTION_CUTOFF)
+        corrected_words.append(match[0] if match else raw_word)
+    return " ".join(corrected_words)
 
 
 @dataclass
@@ -121,6 +157,7 @@ def retrieve_scored(query: str, chunks: list[Chunk] | None = None, k: int = 3) -
     if not chunks:
         return []
 
+    query = _correct_spelling(query, _build_vocabulary(chunks))
     query_tokens = set(_tokenize(query))
     chunk_counts = [c.token_counts() for c in chunks]
     idf = _build_idf(chunk_counts)
@@ -213,6 +250,7 @@ def retrieve_semantic(
     if not chunks:
         return []
 
+    query = _correct_spelling(query, _build_vocabulary(chunks))
     query_vec = _embed_cached(embedder, query)
     scored = [
         (chunk, _cosine_similarity(query_vec, _embed_cached(embedder, f"{chunk.title}\n{chunk.text}")))

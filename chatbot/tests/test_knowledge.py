@@ -1,5 +1,14 @@
 """Tests for the pure-Python keyword retrieval over the product knowledge base."""
-from knowledge import Chunk, is_ambiguous, load_chunks, retrieve, retrieve_scored, retrieve_semantic
+from knowledge import (
+    Chunk,
+    _build_vocabulary,
+    _correct_spelling,
+    is_ambiguous,
+    load_chunks,
+    retrieve,
+    retrieve_scored,
+    retrieve_semantic,
+)
 
 
 class FakeEmbedder:
@@ -139,3 +148,42 @@ def test_retrieve_semantic_caches_embeddings_across_calls():
 
     # same embedder, same query text, same chunk text — both should hit cache, no new calls
     assert embedder.calls == calls_after_first
+
+
+def test_retrieve_tolerates_common_spelling_mistakes():
+    chunks = load_chunks()
+    typo_pairs = [
+        ("morgage rate", "mortgage rate"),
+        ("mortage rate", "mortgage rate"),
+        ("intrest rate", "interest rate"),
+        ("savngs acount", "savings account"),
+        ("personl loan", "personal loan"),
+        ("creditt card fes", "credit card fees"),
+    ]
+    for typo, correct in typo_pairs:
+        assert retrieve(typo, chunks=chunks) == retrieve(correct, chunks=chunks), typo
+
+
+def test_correct_spelling_leaves_correctly_spelled_queries_unchanged():
+    chunks = load_chunks()
+    vocabulary = _build_vocabulary(chunks)
+    clean_queries = [
+        "What's the difference between a savings account and a term deposit?",
+        "How much down payment do I need for a mortgage?",
+        "Tell me about credit card rewards",
+        "What's the bank's current CEO?",  # out-of-scope query must not get "corrected" either
+    ]
+    for query in clean_queries:
+        assert _correct_spelling(query, vocabulary) == query
+
+
+def test_correct_spelling_does_not_false_correct_short_or_unrelated_words():
+    vocabulary = {"mortgage", "interest", "rate", "loan"}
+    # "rare"/"loam" are real 4-letter words one edit away from vocab words but mean something
+    # different — should NOT get silently rewritten into an unrelated topic word.
+    assert _correct_spelling("a rare loam", vocabulary) == "a rare loam"
+
+
+def test_correct_spelling_skips_words_already_in_vocabulary():
+    vocabulary = {"loan", "loam"}  # both valid; "loan" must not get "corrected" to "loam"
+    assert _correct_spelling("loan", vocabulary) == "loan"

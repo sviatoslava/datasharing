@@ -192,6 +192,31 @@ never fire or fire constantly depending on the model — worse than not having t
 Combining semantic retrieval with a properly recalibrated clarification flow is a natural
 next step once the confidence floor has been tuned against a real model.
 
+## Spelling mistakes
+
+Retrieval matches exact tokens (TF-IDF and, separately, embedding cosine similarity both
+work this way underneath), so a single misspelled topic-anchor word used to return nothing:
+
+```
+User: What's the morgage rate for a house?
+Bot:  [grounded in Mortgages — same as if "mortgage" had been spelled correctly]
+```
+
+`knowledge._correct_spelling()` runs before tokenization/embedding: any query word not found
+in the knowledge base's own vocabulary gets nudged toward the closest word that *is* actually
+used in `knowledge/*.md` (via stdlib `difflib.get_close_matches`, no new dependency), if the
+similarity is high enough to plausibly be a typo rather than an unrelated word. This is
+deliberately narrow — it only ever corrects toward a word this knowledge base actually
+contains, never a generic dictionary, so it can't accidentally steer a genuinely out-of-scope
+question toward some unrelated topic. Verified against 6 real typo examples (all now retrieve
+identically to their correctly-spelled equivalents) and checked for false positives on both
+correctly-spelled and out-of-scope queries (both stay untouched) — see
+`tests/test_knowledge.py`.
+
+Short words (2 characters or fewer) are skipped, since edit-distance similarity is unreliable
+at that length — e.g. "opne" (typo of "open") isn't corrected, the same tradeoff that keeps
+real short words like "rate"/"rare" or "loan"/"loam" from being confused for one another.
+
 ## Using real content
 
 To replace the placeholder knowledge base with real, sourced product information:
